@@ -1,0 +1,102 @@
+# --- Housekeeping ---
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Editor config — contains sftp.json with host/port/password, must not be committed
+.vscode/
+
+# Claude Code internal runtime state (not project content)
+.claude/scheduled_tasks.lock
+
+# --- Dataset raw data (see README.md "Data Sources" to download; see sample_data/ for previews) ---
+
+# 2018_n2c2_track1
+2018_n2c2_track1/train/
+2018_n2c2_track1/test_notags/
+2018_n2c2_track1/n2c2-t1_gold_standard_test_data/
+2018_n2c2_track1/zip/
+
+# 2018_n2c2_track2
+2018_n2c2_track2/2018n2c2_test_data_Task1/
+2018_n2c2_track2/2018n2c2_test_data_Task2/
+2018_n2c2_track2/2018n2c2_track2_training/
+2018_n2c2_track2/gold_standard_test/
+2018_n2c2_track2/sample_data/
+
+# 2019_COVID_NLP
+2019_COVID_NLP/*.csv
+2019_COVID_NLP/*.zip
+2019_COVID_NLP/*.readme
+2019_COVID_NLP/pmc_custom_license/
+2019_COVID_NLP/noncomm_use_subset/
+2019_COVID_NLP/biorxiv_medrxiv/
+2019_COVID_NLP/comm_use_subset/
+
+# 2019_n2c2_track1
+2019_n2c2_track1/clinicalSTS2019.train.v2.txt
+2019_n2c2_track1/clinicalSTS2019.train.txt
+2019_n2c2_track1/clinicalSTS2019.test.txt
+2019_n2c2_track1/clinicalSTS2019.test.gs.sim.txt
+
+# 2019_n2c2_track2
+2019_n2c2_track2/*.tsv
+2019_n2c2_track2/bioc-FH-training/
+2019_n2c2_track2/bioc-FH-testing/
+
+# 2022n2c2_track1
+2022n2c2_track1/trainingdata_v3/train/
+2022n2c2_track1/trainingdata_v3/dev/
+2022n2c2_track1/archive/
+
+# 2022n2c2_track2
+2022n2c2_track2/Track2_SubtaskA/Annotations/
+2022n2c2_track2/Track2_SubtaskA.zip
+
+# MMLU-Pro-Health
+MMLU-Pro-Health/*.arrow
+MMLU-Pro-Health/dataset_info.json
+MMLU-Pro-Health/state.json
+
+# MedNLI
+MedNLI/**/*.jsonl
+
+# MedQA-USMLE
+MedQA-USMLE/
+
+# covid
+covid/raw/*.csv
+
+# discharge-me
+discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/
+discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/
+discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/
+discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/
+
+# medmcqa / medqa / pubmedqa
+medmcqa/raw/
+medqa/raw/
+pubmedqa/raw/
+
+# multitask (generated from the above; see multitask/builders/)
+multitask/data/
+multitask/huggingface_format/
+
+# dataset_stats
+dataset_stats/*.log
+
+# semeval_2015 (SemEval-2015 Task 14 disorder recognition, ShARe/MIMIC-derived)
+semeval_2015/train/
+semeval_2015/test/
+
+# umn_abbreviation (UMN Clinical Abbreviation & Acronym Sense Inventory)
+umn_abbreviation/raw/
+
+# 2010_i2b2_va (Concepts, Assertions, and Relations in Clinical Text) --
+# DUA-gated, not yet obtained; folder is empty/absent until placed by hand.
+2010_i2b2_va/train/
+2010_i2b2_va/test/
+
+CLAUDE.md
+.claude

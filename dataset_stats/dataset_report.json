@@ -1,0 +1,846 @@
+{
+  "qwen3_4b_tokenizer_available": true,
+  "qwen3_4b_error": null,
+  "duplicates_skipped": [
+    {
+      "dataset": "medqa",
+      "subset": "train/dev/test.jsonl",
+      "task_type": "MCQA",
+      "note": "byte-identical duplicate of MedQA-USMLE-US (question/train,dev,test.jsonl); not re-tokenized"
+    }
+  ],
+  "datasets": [
+    {
+      "dataset": "MedNLI",
+      "subset": "sentence pairs",
+      "task_type": "NLI",
+      "format": "jsonl",
+      "tiktoken_cl100k": {
+        "n": 14049,
+        "min": 8,
+        "mean": 34.0,
+        "median": 29.0,
+        "p95": 71.0,
+        "p99": 110.0,
+        "max": 348
+      },
+      "qwen3_4b": {
+        "n": 14049,
+        "min": 8,
+        "mean": 35.2,
+        "median": 30.0,
+        "p95": 74.0,
+        "p99": 118.52000000000044,
+        "max": 364
+      },
+      "longest_locator_tiktoken": "MedNLI/mednli-a-natural-language-inference-dataset-for-the-clinical-domain-1.0.0/mli_train_v1.jsonl#9456",
+      "longest_locator_qwen3_4b": "MedNLI/mednli-a-natural-language-inference-dataset-for-the-clinical-domain-1.0.0/mli_train_v1.jsonl#9456"
+    },
+    {
+      "dataset": "MedQA-USMLE-US",
+      "subset": "question+options",
+      "task_type": "MCQA",
+      "format": "jsonl",
+      "tiktoken_cl100k": {
+        "n": 27092,
+        "min": 44,
+        "mean": 207.5,
+        "median": 196.0,
+        "p95": 350.0,
+        "p99": 441.0,
+        "max": 929
+      },
+      "qwen3_4b": {
+        "n": 27092,
+        "min": 44,
+        "mean": 214.0,
+        "median": 201.0,
+        "p95": 367.0,
+        "p99": 470.0,
+        "max": 964
+      },
+      "longest_locator_tiktoken": "MedQA-USMLE/questions/US/US_qbank.jsonl#217",
+      "longest_locator_qwen3_4b": "MedQA-USMLE/questions/US/US_qbank.jsonl#217"
+    },
+    {
+      "dataset": "MedQA-USMLE-Mainland",
+      "subset": "question+options (zh)",
+      "task_type": "MCQA",
+      "format": "jsonl",
+      "tiktoken_cl100k": {
+        "n": 68504,
+        "min": 7,
+        "mean": 91.7,
+        "median": 81.0,
+        "p95": 218.0,
+        "p99": 293.0,
+        "max": 644
+      },
+      "qwen3_4b": {
+        "n": 68504,
+        "min": 6,
+        "mean": 57.9,
+        "median": 52.0,
+        "p95": 139.0,
+        "p99": 186.0,
+        "max": 331
+      },
+      "longest_locator_tiktoken": "MedQA-USMLE/questions/Mainland/train.jsonl#12066",
+      "longest_locator_qwen3_4b": "MedQA-USMLE/questions/Mainland/train.jsonl#12066"
+    },
+    {
+      "dataset": "MedQA-USMLE-Taiwan",
+      "subset": "question+options (zh-TW)",
+      "task_type": "MCQA",
+      "format": "jsonl",
+      "tiktoken_cl100k": {
+        "n": 28246,
+        "min": 3,
+        "mean": 118.1,
+        "median": 99.0,
+        "p95": 281.0,
+        "p99": 392.0,
+        "max": 1311
+      },
+      "qwen3_4b": {
+        "n": 28246,
+        "min": 4,
+        "mean": 72.9,
+        "median": 63.0,
+        "p95": 171.0,
+        "p99": 238.54999999999927,
+        "max": 1330
+      },
+      "longest_locator_tiktoken": "MedQA-USMLE/questions/Taiwan/train.jsonl#3512",
+      "longest_locator_qwen3_4b": "MedQA-USMLE/questions/Taiwan/train.jsonl#3512"
+    },
+    {
+      "dataset": "MedQA-USMLE-textbooks-en",
+      "subset": "whole textbook",
+      "task_type": "raw corpus (long-form)",
+      "format": "txt",
+      "tiktoken_cl100k": {
+        "n": 18,
+        "min": 103385,
+        "mean": 1120717.1,
+        "median": 735938.0,
+        "p95": 3026825.899999997,
+        "p99": 4455754.779999997,
+        "max": 4812987
+      },
+      "qwen3_4b": {
+        "n": 18,
+        "min": 104498,
+        "mean": 1156764.3,
+        "median": 751520.0,
+        "p95": 3181856.6999999974,
+        "p99": 4553823.339999996,
+        "max": 4896815
+      },
+      "longest_locator_tiktoken": "MedQA-USMLE/textbooks/en/InternalMed_Harrison.txt",
+      "longest_locator_qwen3_4b": "MedQA-USMLE/textbooks/en/InternalMed_Harrison.txt"
+    },
+    {
+      "dataset": "MedQA-USMLE-textbooks-zh",
+      "subset": "whole textbook (zh)",
+      "task_type": "raw corpus (long-form)",
+      "format": "txt",
+      "tiktoken_cl100k": {
+        "n": 2,
+        "min": 18363834,
+        "mean": 18368322.5,
+        "median": 18368322.5,
+        "p95": 18372362.15,
+        "p99": 18372721.23,
+        "max": 18372811
+      },
+      "qwen3_4b": {
+        "n": 2,
+        "min": 10006189,
+        "mean": 10010759.0,
+        "median": 10010759.0,
+        "p95": 10014872.0,
+        "p99": 10015237.6,
+        "max": 10015329
+      },
+      "longest_locator_tiktoken": "MedQA-USMLE/textbooks/zh_sentence/all_books.txt",
+      "longest_locator_qwen3_4b": "MedQA-USMLE/textbooks/zh_sentence/all_books.txt"
+    },
+    {
+      "dataset": "MMLU-Pro-Health",
+      "subset": "question+options+cot",
+      "task_type": "MCQA",
+      "format": "arrow",
+      "tiktoken_cl100k": {
+        "n": 823,
+        "min": 30,
+        "mean": 140.9,
+        "median": 123.0,
+        "p95": 283.0,
+        "p99": 378.0,
+        "max": 1048
+      },
+      "qwen3_4b": {
+        "n": 823,
+        "min": 30,
+        "mean": 143.9,
+        "median": 124.0,
+        "p95": 291.9,
+        "p99": 395.89999999999986,
+        "max": 1074
+      },
+      "longest_locator_tiktoken": "MMLU-Pro-Health#324",
+      "longest_locator_qwen3_4b": "MMLU-Pro-Health#324"
+    },
+    {
+      "dataset": "medmcqa",
+      "subset": "question+options+explanation",
+      "task_type": "MCQA + explanation",
+      "format": "jsonl",
+      "tiktoken_cl100k": {
+        "n": 193155,
+        "min": 10,
+        "mean": 142.9,
+        "median": 105.0,
+        "p95": 390.0,
+        "p99": 693.0,
+        "max": 5357
+      },
+      "qwen3_4b": {
+        "n": 193155,
+        "min": 10,
+        "mean": 145.5,
+        "median": 107.0,
+        "p95": 396.0,
+        "p99": 704.0,
+        "max": 5374
+      },
+      "longest_locator_tiktoken": "medmcqa/raw/train.json#110915",
+      "longest_locator_qwen3_4b": "medmcqa/raw/train.json#110915"
+    },
+    {
+      "dataset": "pubmedqa",
+      "subset": "question+contexts+long_answer",
+      "task_type": "QA / yes-no-maybe classification",
+      "format": "json-dict",
+      "tiktoken_cl100k": {
+        "n": 211819,
+        "min": 34,
+        "mean": 392.3,
+        "median": 388.0,
+        "p95": 556.0,
+        "p99": 673.0,
+        "max": 1614
+      },
+      "qwen3_4b": {
+        "n": 211819,
+        "min": 34,
+        "mean": 406.1,
+        "median": 400.0,
+        "p95": 583.0,
+        "p99": 711.0,
+        "max": 1792
+      },
+      "longest_locator_tiktoken": "pubmedqa/raw/ori_pqaa.json#11056662",
+      "longest_locator_qwen3_4b": "pubmedqa/raw/ori_pqaa.json#22972103"
+    },
+    {
+      "dataset": "covid (LitCovid)",
+      "subset": "title+abstract",
+      "task_type": "multi-label text classification",
+      "format": "csv",
+      "tiktoken_cl100k": {
+        "n": 33699,
+        "min": 11,
+        "mean": 309.2,
+        "median": 299.0,
+        "p95": 543.0,
+        "p99": 739.0399999999936,
+        "max": 2277
+      },
+      "qwen3_4b": {
+        "n": 33699,
+        "min": 12,
+        "mean": 323.2,
+        "median": 308.0,
+        "p95": 580.0,
+        "p99": 799.0,
+        "max": 2379
+      },
+      "longest_locator_tiktoken": "covid/raw/BC7-LitCovid-Dev.csv#5652",
+      "longest_locator_qwen3_4b": "covid/raw/BC7-LitCovid-Dev.csv#5652"
+    },
+    {
+      "dataset": "CORD-19-metadata",
+      "subset": "title+abstract",
+      "task_type": "raw corpus / IR",
+      "format": "csv",
+      "tiktoken_cl100k": {
+        "n": 29500,
+        "min": 1,
+        "mean": 299.7,
+        "median": 306.0,
+        "p95": 539.0,
+        "p99": 653.0099999999984,
+        "max": 35185
+      },
+      "qwen3_4b": {
+        "n": 29500,
+        "min": 1,
+        "mean": 307.1,
+        "median": 311.0,
+        "p95": 559.0,
+        "p99": 681.0299999999952,
+        "max": 36565
+      },
+      "longest_locator_tiktoken": "2019_COVID_NLP/all_sources_metadata_2020-03-13.csv#7027",
+      "longest_locator_qwen3_4b": "2019_COVID_NLP/all_sources_metadata_2020-03-13.csv#7027"
+    },
+    {
+      "dataset": "CORD-19-fulltext",
+      "subset": "full paper body text",
+      "task_type": "raw corpus / IR",
+      "format": "json",
+      "tiktoken_cl100k": {
+        "n": 1677,
+        "min": 3,
+        "mean": 5433.1,
+        "median": 4524.0,
+        "p95": 12235.199999999999,
+        "p99": 17507.200000000004,
+        "max": 131293
+      },
+      "qwen3_4b": {
+        "n": 1677,
+        "min": 3,
+        "mean": 5668.7,
+        "median": 4700.0,
+        "p95": 12658.799999999977,
+        "p99": 18737.08,
+        "max": 136836
+      },
+      "longest_locator_tiktoken": "2019_COVID_NLP/pmc_custom_license/pmc_custom_license/2e2bc679c8393230bac2af64115bab7ed1ba62c0.json",
+      "longest_locator_qwen3_4b": "2019_COVID_NLP/pmc_custom_license/pmc_custom_license/2e2bc679c8393230bac2af64115bab7ed1ba62c0.json"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "train: discharge note text",
+      "task_type": "summarization",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 68785,
+        "min": 389,
+        "mean": 3458.7,
+        "median": 3320.0,
+        "p95": 5736.799999999996,
+        "p99": 7468.1600000000035,
+        "max": 17254
+      },
+      "qwen3_4b": {
+        "n": 68785,
+        "min": 391,
+        "mean": 3599.4,
+        "median": 3457.0,
+        "p95": 5976.0,
+        "p99": 7787.0,
+        "max": 18682
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/discharge.csv.gz#52966",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/discharge.csv.gz#52966"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "train: radiology report text",
+      "task_type": "summarization (source)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 259304,
+        "min": 7,
+        "mean": 329.8,
+        "median": 210.0,
+        "p95": 943.0,
+        "p99": 1335.0,
+        "max": 5359
+      },
+      "qwen3_4b": {
+        "n": 259304,
+        "min": 7,
+        "mean": 332.8,
+        "median": 211.0,
+        "p95": 954.0,
+        "p99": 1354.0,
+        "max": 5464
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/radiology.csv.gz#78555",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/radiology.csv.gz#78555"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "train: target (instructions+course)",
+      "task_type": "summarization (target)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 68785,
+        "min": 36,
+        "mean": 804.7,
+        "median": 728.0,
+        "p95": 1642.0,
+        "p99": 2239.0,
+        "max": 7991
+      },
+      "qwen3_4b": {
+        "n": 68785,
+        "min": 38,
+        "mean": 811.4,
+        "median": 734.0,
+        "p95": 1659.0,
+        "p99": 2260.1600000000035,
+        "max": 8007
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/discharge_target.csv.gz#30774",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/discharge_target.csv.gz#30774"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "valid: discharge note text",
+      "task_type": "summarization",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 14719,
+        "min": 626,
+        "mean": 3457.8,
+        "median": 3319.0,
+        "p95": 5741.0,
+        "p99": 7482.82,
+        "max": 14951
+      },
+      "qwen3_4b": {
+        "n": 14719,
+        "min": 626,
+        "mean": 3597.3,
+        "median": 3456.0,
+        "p95": 5974.299999999996,
+        "p99": 7756.459999999999,
+        "max": 16157
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/discharge.csv.gz#4808",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/discharge.csv.gz#4808"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "valid: radiology report text",
+      "task_type": "summarization (source)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 54650,
+        "min": 8,
+        "mean": 331.5,
+        "median": 211.0,
+        "p95": 941.0,
+        "p99": 1333.510000000002,
+        "max": 4835
+      },
+      "qwen3_4b": {
+        "n": 54650,
+        "min": 8,
+        "mean": 334.5,
+        "median": 212.0,
+        "p95": 952.0,
+        "p99": 1354.510000000002,
+        "max": 4930
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/radiology.csv.gz#15643",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/radiology.csv.gz#15643"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "valid: target (instructions+course)",
+      "task_type": "summarization (target)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 14719,
+        "min": 61,
+        "mean": 803.0,
+        "median": 721.0,
+        "p95": 1636.0,
+        "p99": 2258.6399999999994,
+        "max": 8539
+      },
+      "qwen3_4b": {
+        "n": 14719,
+        "min": 61,
+        "mean": 809.6,
+        "median": 727.0,
+        "p95": 1652.199999999997,
+        "p99": 2276.8199999999997,
+        "max": 8599
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/discharge_target.csv.gz#2357",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/discharge_target.csv.gz#2357"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "test_phase_1: discharge note text",
+      "task_type": "summarization",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 14702,
+        "min": 449,
+        "mean": 3458.7,
+        "median": 3326.0,
+        "p95": 5743.0,
+        "p99": 7253.98,
+        "max": 15433
+      },
+      "qwen3_4b": {
+        "n": 14702,
+        "min": 449,
+        "mean": 3599.5,
+        "median": 3460.0,
+        "p95": 5986.949999999999,
+        "p99": 7557.819999999996,
+        "max": 15953
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/discharge.csv.gz#6114",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/discharge.csv.gz#6114"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "test_phase_1: radiology report text",
+      "task_type": "summarization (source)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 54797,
+        "min": 11,
+        "mean": 329.1,
+        "median": 210.0,
+        "p95": 940.0,
+        "p99": 1340.0,
+        "max": 3481
+      },
+      "qwen3_4b": {
+        "n": 54797,
+        "min": 11,
+        "mean": 332.1,
+        "median": 211.0,
+        "p95": 951.0,
+        "p99": 1357.0,
+        "max": 3528
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/radiology.csv.gz#10154",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/radiology.csv.gz#10154"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "test_phase_1: target (instructions+course)",
+      "task_type": "summarization (target)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 14702,
+        "min": 36,
+        "mean": 804.1,
+        "median": 726.0,
+        "p95": 1646.0,
+        "p99": 2203.9399999999987,
+        "max": 5457
+      },
+      "qwen3_4b": {
+        "n": 14702,
+        "min": 36,
+        "mean": 810.8,
+        "median": 732.0,
+        "p95": 1662.949999999999,
+        "p99": 2223.99,
+        "max": 5491
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/discharge_target.csv.gz#262",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/discharge_target.csv.gz#262"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "test_phase_2: discharge note text",
+      "task_type": "summarization",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 10962,
+        "min": 639,
+        "mean": 3448.9,
+        "median": 3301.5,
+        "p95": 5742.0,
+        "p99": 7407.949999999997,
+        "max": 14393
+      },
+      "qwen3_4b": {
+        "n": 10962,
+        "min": 646,
+        "mean": 3588.6,
+        "median": 3434.0,
+        "p95": 5980.949999999999,
+        "p99": 7687.389999999999,
+        "max": 14620
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/discharge.csv.gz#8473",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/discharge.csv.gz#8473"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "test_phase_2: radiology report text",
+      "task_type": "summarization (source)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 40608,
+        "min": 11,
+        "mean": 331.8,
+        "median": 212.0,
+        "p95": 941.0,
+        "p99": 1341.9300000000003,
+        "max": 5363
+      },
+      "qwen3_4b": {
+        "n": 40608,
+        "min": 11,
+        "mean": 334.9,
+        "median": 213.0,
+        "p95": 953.0,
+        "p99": 1364.0,
+        "max": 5486
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/radiology.csv.gz#16187",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/radiology.csv.gz#16187"
+    },
+    {
+      "dataset": "discharge-me",
+      "subset": "test_phase_2: target (instructions+course)",
+      "task_type": "summarization (target)",
+      "format": "csv.gz",
+      "tiktoken_cl100k": {
+        "n": 10962,
+        "min": 61,
+        "mean": 802.6,
+        "median": 725.0,
+        "p95": 1651.0,
+        "p99": 2274.1699999999983,
+        "max": 4611
+      },
+      "qwen3_4b": {
+        "n": 10962,
+        "min": 61,
+        "mean": 809.3,
+        "median": 730.0,
+        "p95": 1667.0,
+        "p99": 2297.1699999999983,
+        "max": 4658
+      },
+      "longest_locator_tiktoken": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/discharge_target.csv.gz#8418",
+      "longest_locator_qwen3_4b": "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/discharge_target.csv.gz#8418"
+    },
+    {
+      "dataset": "2018_n2c2_track1",
+      "subset": "note <TEXT>",
+      "task_type": "text classification (cohort eligibility)",
+      "format": "xml",
+      "tiktoken_cl100k": {
+        "n": 288,
+        "min": 1671,
+        "mean": 5300.0,
+        "median": 4999.5,
+        "p95": 9472.549999999997,
+        "p99": 11681.519999999999,
+        "max": 15199
+      },
+      "qwen3_4b": {
+        "n": 288,
+        "min": 1797,
+        "mean": 5620.4,
+        "median": 5263.5,
+        "p95": 10135.599999999997,
+        "p99": 12675.019999999999,
+        "max": 16103
+      },
+      "longest_locator_tiktoken": "2018_n2c2_track1/train/291.xml",
+      "longest_locator_qwen3_4b": "2018_n2c2_track1/train/291.xml"
+    },
+    {
+      "dataset": "2018_n2c2_track2",
+      "subset": "clinical note text",
+      "task_type": "NER + RE (ADE / medication)",
+      "format": "txt",
+      "tiktoken_cl100k": {
+        "n": 505,
+        "min": 219,
+        "mean": 3889.9,
+        "median": 3656.0,
+        "p95": 7089.999999999998,
+        "p99": 8853.479999999987,
+        "max": 13666
+      },
+      "qwen3_4b": {
+        "n": 505,
+        "min": 245,
+        "mean": 4136.2,
+        "median": 3874.0,
+        "p95": 7573.6,
+        "p99": 9271.599999999993,
+        "max": 14611
+      },
+      "longest_locator_tiktoken": "2018_n2c2_track2/2018n2c2_track2_training/117745.txt",
+      "longest_locator_qwen3_4b": "2018_n2c2_track2/2018n2c2_track2_training/117745.txt"
+    },
+    {
+      "dataset": "2019_n2c2_track1",
+      "subset": "sentence1+sentence2",
+      "task_type": "semantic textual similarity (regression)",
+      "format": "tsv-in-txt",
+      "tiktoken_cl100k": {
+        "n": 2066,
+        "min": 18,
+        "mean": 53.9,
+        "median": 45.0,
+        "p95": 117.0,
+        "p99": 175.3499999999999,
+        "max": 274
+      },
+      "qwen3_4b": {
+        "n": 2066,
+        "min": 18,
+        "mean": 54.7,
+        "median": 47.0,
+        "p95": 118.0,
+        "p99": 175.3499999999999,
+        "max": 274
+      },
+      "longest_locator_tiktoken": "2019_n2c2_track1/clinicalSTS2019.train.txt#1219",
+      "longest_locator_qwen3_4b": "2019_n2c2_track1/clinicalSTS2019.train.txt#1219"
+    },
+    {
+      "dataset": "2019_n2c2_track2",
+      "subset": "clinical note text",
+      "task_type": "NER + attribute/relation extraction (family history)",
+      "format": "txt",
+      "tiktoken_cl100k": {
+        "n": 216,
+        "min": 58,
+        "mean": 341.5,
+        "median": 320.0,
+        "p95": 619.0,
+        "p99": 957.3999999999994,
+        "max": 1090
+      },
+      "qwen3_4b": {
+        "n": 216,
+        "min": 58,
+        "mean": 351.1,
+        "median": 328.0,
+        "p95": 637.5,
+        "p99": 959.7999999999995,
+        "max": 1109
+      },
+      "longest_locator_tiktoken": "2019_n2c2_track2/bioc-FH-testing/doc_test_1055.txt",
+      "longest_locator_qwen3_4b": "2019_n2c2_track2/bioc-FH-testing/doc_test_1055.txt"
+    },
+    {
+      "dataset": "2022n2c2_track1",
+      "subset": "clinical note text",
+      "task_type": "event extraction / classification (medication disposition)",
+      "format": "txt",
+      "tiktoken_cl100k": {
+        "n": 400,
+        "min": 173,
+        "mean": 1234.6,
+        "median": 995.5,
+        "p95": 2751.099999999998,
+        "p99": 3360.7599999999984,
+        "max": 5952
+      },
+      "qwen3_4b": {
+        "n": 400,
+        "min": 185,
+        "mean": 1308.3,
+        "median": 1058.0,
+        "p95": 2974.9999999999973,
+        "p99": 3615.5199999999986,
+        "max": 6227
+      },
+      "longest_locator_tiktoken": "2022n2c2_track1/trainingdata_v3/train/291-02.txt",
+      "longest_locator_qwen3_4b": "2022n2c2_track1/trainingdata_v3/train/291-02.txt"
+    },
+    {
+      "dataset": "2022n2c2_track2",
+      "subset": "clinical note text",
+      "task_type": "NER + attribute extraction (social history)",
+      "format": "txt",
+      "tiktoken_cl100k": {
+        "n": 1504,
+        "min": 3,
+        "mean": 70.2,
+        "median": 60.0,
+        "p95": 166.8499999999999,
+        "p99": 238.94000000000005,
+        "max": 335
+      },
+      "qwen3_4b": {
+        "n": 1504,
+        "min": 3,
+        "mean": 73.3,
+        "median": 62.0,
+        "p95": 175.8499999999999,
+        "p99": 245.97000000000003,
+        "max": 370
+      },
+      "longest_locator_tiktoken": "2022n2c2_track2/Track2_SubtaskA/Annotations/train/mimic/4743.txt",
+      "longest_locator_qwen3_4b": "2022n2c2_track2/Track2_SubtaskA/Annotations/train/mimic/4743.txt"
+    }
+  ],
+  "global_longest_tiktoken_cl100k": {
+    "dataset": "MedQA-USMLE-textbooks-zh",
+    "subset": "whole textbook (zh)",
+    "task_type": "raw corpus (long-form)",
+    "format": "txt",
+    "tiktoken_cl100k": {
+      "n": 2,
+      "min": 18363834,
+      "mean": 18368322.5,
+      "median": 18368322.5,
+      "p95": 18372362.15,
+      "p99": 18372721.23,
+      "max": 18372811
+    },
+    "qwen3_4b": {
+      "n": 2,
+      "min": 10006189,
+      "mean": 10010759.0,
+      "median": 10010759.0,
+      "p95": 10014872.0,
+      "p99": 10015237.6,
+      "max": 10015329
+    },
+    "longest_locator_tiktoken": "MedQA-USMLE/textbooks/zh_sentence/all_books.txt",
+    "longest_locator_qwen3_4b": "MedQA-USMLE/textbooks/zh_sentence/all_books.txt"
+  },
+  "global_longest_qwen3_4b": {
+    "dataset": "MedQA-USMLE-textbooks-zh",
+    "subset": "whole textbook (zh)",
+    "task_type": "raw corpus (long-form)",
+    "format": "txt",
+    "tiktoken_cl100k": {
+      "n": 2,
+      "min": 18363834,
+      "mean": 18368322.5,
+      "median": 18368322.5,
+      "p95": 18372362.15,
+      "p99": 18372721.23,
+      "max": 18372811
+    },
+    "qwen3_4b": {
+      "n": 2,
+      "min": 10006189,
+      "mean": 10010759.0,
+      "median": 10010759.0,
+      "p95": 10014872.0,
+      "p99": 10015237.6,
+      "max": 10015329
+    },
+    "longest_locator_tiktoken": "MedQA-USMLE/textbooks/zh_sentence/all_books.txt",
+    "longest_locator_qwen3_4b": "MedQA-USMLE/textbooks/zh_sentence/all_books.txt"
+  }
+}

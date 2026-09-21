@@ -1,0 +1,114 @@
+{
+  "25429730": {
+    "QUESTION": "Are group 2 innate lymphoid cells ( ILC2s ) increased in chronic rhinosinusitis with nasal polyps or eosinophilia?",
+    "CONTEXTS": [
+      "Chronic rhinosinusitis (CRS) is a heterogeneous disease with an uncertain pathogenesis. Group 2 innate lymphoid cells (ILC2s) represent a recently discovered cell population which has been implicated in driving Th2 inflammation in CRS; however, their relationship with clinical disease characteristics has yet to be investigated.",
+      "The aim of this study was to identify ILC2s in sinus mucosa in patients with CRS and controls and compare ILC2s across characteristics of disease.",
+      "A cross-sectional study of patients with CRS undergoing endoscopic sinus surgery was conducted. Sinus mucosal biopsies were obtained during surgery and control tissue from patients undergoing pituitary tumour resection through transphenoidal approach. ILC2s were identified as CD45(+) Lin(-) CD127(+) CD4(-) CD8(-) CRTH2(CD294)(+) CD161(+) cells in single cell suspensions through flow cytometry. ILC2 frequencies, measured as a percentage of CD45(+) cells, were compared across CRS phenotype, endotype, inflammatory CRS subtype and other disease characteristics including blood eosinophils, serum IgE, asthma status and nasal symptom score.",
+      "35 patients (40% female, age 48 \u00b1 17 years) including 13 with eosinophilic CRS (eCRS), 13 with non-eCRS and 9 controls were recruited. ILC2 frequencies were associated with the presence of nasal polyps (P = 0.002) as well as high tissue eosinophilia (P = 0.004) and eosinophil-dominant CRS (P = 0.001) (Mann-Whitney U). They were also associated with increased blood eosinophilia (P = 0.005). There were no significant associations found between ILC2s and serum total IgE and allergic disease. In the CRS with nasal polyps (CRSwNP) population, ILC2s were increased in patients with co-existing asthma (P = 0.03). ILC2s were also correlated with worsening nasal symptom score in CRS (P = 0.04)."
+    ],
+    "LABELS": [
+      "BACKGROUND",
+      "OBJECTIVE",
+      "METHODS",
+      "RESULTS"
+    ],
+    "LONG_ANSWER": "As ILC2s are elevated in patients with CRSwNP, they may drive nasal polyp formation in CRS. ILC2s are also linked with high tissue and blood eosinophilia and have a potential role in the activation and survival of eosinophils during the Th2 immune response. The association of innate lymphoid cells in CRS provides insights into its pathogenesis.",
+    "MESHES": [
+      "Adult",
+      "Aged",
+      "Antigens, Surface",
+      "Case-Control Studies",
+      "Chronic Disease",
+      "Eosinophilia",
+      "Female",
+      "Humans",
+      "Hypersensitivity",
+      "Immunity, Innate",
+      "Immunoglobulin E",
+      "Immunophenotyping",
+      "Leukocyte Count",
+      "Lymphocyte Subsets",
+      "Male",
+      "Middle Aged",
+      "Nasal Mucosa",
+      "Nasal Polyps",
+      "Neutrophil Infiltration",
+      "Patient Outcome Assessment",
+      "Rhinitis",
+      "Sinusitis",
+      "Young Adult"
+    ],
+    "final_decision": "yes"
+  },
+  "25433161": {
+    "QUESTION": "Does vagus nerve contribute to the development of steatohepatitis and obesity in phosphatidylethanolamine N-methyltransferase deficient mice?",
+    "CONTEXTS": [
+      "Phosphatidylethanolamine N-methyltransferase (PEMT), a liver enriched enzyme, is responsible for approximately one third of hepatic phosphatidylcholine biosynthesis. When fed a high-fat diet (HFD), Pemt(-/-) mice are protected from HF-induced obesity; however, they develop steatohepatitis. The vagus nerve relays signals between liver and brain that regulate peripheral adiposity and pancreas function. Here we explore a possible role of the hepatic branch of the vagus nerve in the development of diet induced obesity and steatohepatitis in Pemt(-/-) mice.",
+      "8-week old Pemt(-/-) and Pemt(+/+) mice were subjected to hepatic vagotomy (HV) or capsaicin treatment, which selectively disrupts afferent nerves, and were compared to sham-operated or vehicle-treatment, respectively. After surgery, mice were fed a HFD for 10 weeks.",
+      "HV abolished the protection against the HFD-induced obesity and glucose intolerance in Pemt(-/-) mice. HV normalized phospholipid content and prevented steatohepatitis in Pemt(-/-) mice. Moreover, HV increased the hepatic anti-inflammatory cytokine interleukin-10, reduced chemokine monocyte chemotactic protein-1 and the ER stress marker C/EBP homologous protein. Furthermore, HV normalized the expression of mitochondrial electron transport chain proteins and of proteins involved in fatty acid synthesis, acetyl-CoA carboxylase and fatty acid synthase in Pemt(-/-) mice. However, disruption of the hepatic afferent vagus nerve by capsaicin failed to reverse either the protection against the HFD-induced obesity or the development of HF-induced steatohepatitis in Pemt(-/-) mice."
+    ],
+    "LABELS": [
+      "OBJECTIVE",
+      "METHODS",
+      "RESULTS"
+    ],
+    "LONG_ANSWER": "Neuronal signals via the hepatic vagus nerve contribute to the development of steatohepatitis and protection against obesity in HFD fed Pemt(-/-) mice.",
+    "MESHES": [
+      "Animals",
+      "Chemokine CCL2",
+      "Diet, High-Fat",
+      "Disease Models, Animal",
+      "Fatty Liver",
+      "Interleukin-10",
+      "Liver",
+      "Mice",
+      "Obesity",
+      "Phosphatidylcholines",
+      "Phosphatidylethanolamine N-Methyltransferase",
+      "Postoperative Period",
+      "Transcription Factor CHOP",
+      "Vagotomy",
+      "Vagus Nerve"
+    ],
+    "final_decision": "yes"
+  },
+  "25445714": {
+    "QUESTION": "Does psammaplin A induce Sirtuin 1-dependent autophagic cell death in doxorubicin-resistant MCF-7/adr human breast cancer cells and xenografts?",
+    "CONTEXTS": [
+      "Psammaplin A (PsA) is a natural product isolated from marine sponges, which has been demonstrated to have anticancer activity against several human cancer cell lines via the induction of cell cycle arrest and apoptosis. New drugs that are less toxic and more effective against multidrug-resistant cancers are urgently needed.",
+      "We tested cell proliferation, cell cycle progression and autophagic cell death pathway in doxorubicin-resistant MCF-7 (MCF-7/adr) human breast cancer cells. The potency of PsA was further determined using an in vivo xenograft model."
+    ],
+    "LABELS": [
+      "BACKGROUND",
+      "METHODS"
+    ],
+    "LONG_ANSWER": "PsA significantly inhibited MCF-7/adr cells proliferation in a concentration-dependent manner, with accumulation of cells in G2/M phase of the cell cycle. PsA significantly decreased SIRT1 enzyme activity and reduced expression of SIRT1 protein in the cultured cells with greater potency than sirtinol or salermide. Acetylation of p53, a putative target of SIRT1, increased significantly following PsA treatment. In addition, PsA markedly increased the expression levels of autophagy-related proteins. In support of this, it was found that PsA significantly increased the expression of damage-regulated autophagy modulator (DRAM), a p53-induced protein.",
+    "MESHES": [
+      "Acetylation",
+      "Animals",
+      "Antibiotics, Antineoplastic",
+      "Autophagy",
+      "Breast Neoplasms",
+      "Cell Division",
+      "Cell Line, Tumor",
+      "Disulfides",
+      "Doxorubicin",
+      "Drug Resistance, Neoplasm",
+      "Female",
+      "G2 Phase",
+      "Gene Expression Regulation, Neoplastic",
+      "Heterografts",
+      "Humans",
+      "Membrane Proteins",
+      "Mice",
+      "Mice, Nude",
+      "Neoplasm Transplantation",
+      "Sirtuin 1",
+      "Tumor Suppressor Protein p53",
+      "Tyrosine",
+      "Xenograft Model Antitumor Assays"
+    ],
+    "final_decision": "yes"
+  }
+}

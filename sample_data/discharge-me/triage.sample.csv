@@ -1,0 +1,4 @@
+subject_id,stay_id,temperature,heartrate,resprate,o2sat,sbp,dbp,pain,acuity,chiefcomplaint
+10000032,38112554,98.9,88.0,18.0,97.0,116.0,88.0,10,3.0,Abdominal distention
+10000117,32642808,97.6,81.0,16.0,100.0,148.0,83.0,0,3.0,Throat foreign body sensation
+10000935,35197384,97.8,120.0,20.0,98.0,121.0,77.0,0,3.0,VOMITING AND/OR NAUSEA

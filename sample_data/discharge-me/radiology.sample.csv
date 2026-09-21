@@ -1,0 +1,72 @@
+note_id,subject_id,hadm_id,note_type,note_seq,charttime,storetime,text
+10000032-RR-22,10000032,22841357,RR,22,2180-06-26 17:15:00,2180-06-26 19:28:00,"EXAMINATION:  LIVER OR GALLBLADDER US (SINGLE ORGAN)
+
+INDICATION:  History: ___ with cirrhosis, increased abdominal pain
+
+TECHNIQUE:  Grey scale and color Doppler ultrasound images of the right upper
+quadrant were obtained.
+
+COMPARISON:  Abdominal ultrasound from ___
+
+FINDINGS: 
+
+The liver is extremely course and nodular in echotexture similar to the prior
+examination consistent with a history of cirrhosis. Parenchymal heterogeneity
+limits detection focal lesions. Note is made of a dominant nodule measuring
+3.3 x 2.7 cm exerting mass effect on the gallbladder, relatively unchanged
+from the prior examination. There is no intrahepatic biliary dilation. The CBD
+measures 5 mm. Main, right anterior and right posterior portal veins are
+patent with hepatopetal flow. The gallbladder is normal without stones or wall
+thickening. Pancreas is not well evaluated. The spleen measures 11.9 cm in
+length and has homogeneous echotexture. There is moderate ascites throughout
+the abdomen.
+
+IMPRESSION: 
+
+1. Extremely coarse and nodular liver echotexture consistent with cirrhosis.
+
+2.  Moderate ascites.
+
+3.  Patent portal vein.
+"
+10000032-RR-23,10000032,22841357,RR,23,2180-06-26 17:17:00,2180-06-26 17:28:00,"EXAMINATION:  CHEST (PA AND LAT)
+
+INDICATION:  History: ___ with shortness of breath
+
+TECHNIQUE:  Chest PA and lateral
+
+COMPARISON:  ___
+
+FINDINGS: 
+
+The cardiac, mediastinal and hilar contours are normal. Pulmonary vasculature
+is normal.  Lungs are clear. No pleural effusion or pneumothorax is present.
+Multiple clips are again seen projecting over the left breast.  Remote
+left-sided rib fractures are also re- demonstrated.
+
+IMPRESSION: 
+
+No acute cardiopulmonary abnormality.
+"
+10000117-RR-13,10000117,22927623,RR,13,2181-11-15 00:40:00,2181-11-15 07:54:00,"EXAMINATION:   CHEST (PA AND LAT)
+
+INDICATION:  History: ___ with PMH GERD presenting with sensation of foreign
+body in her throat, SOB.  // Foreign body or soft tissue mass in throat?
+
+TECHNIQUE:  Chest PA and lateral
+
+COMPARISON:  Chest radiograph from ___.
+
+FINDINGS: 
+
+Lungs remain hyperinflated, without focal consolidation, pleural effusion, or
+pneumothorax.  On lateral view, the prominent esophagus is identified between
+the posterior heart and anterior aortic arch.  The cardiomediastinal
+silhouette is unremarkable.  The trachea is not deviated.
+
+IMPRESSION: 
+
+Prominent esophagus on lateral view, without air-fluid level.  Given the
+patient's history and radiographic appearance, barium swallow is indicated
+either now or electively.
+"

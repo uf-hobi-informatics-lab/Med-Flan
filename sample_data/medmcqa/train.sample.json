@@ -1,0 +1,41 @@
+[
+  {
+    "question": "Chronic urethral obstruction due to benign prismatic hyperplasia can lead to the following change in kidney parenchyma",
+    "exp": "Chronic urethral obstruction because of urinary calculi, prostatic hyperophy, tumors, normal pregnancy, tumors, uterine prolapse or functional disorders cause hydronephrosis which by definition is used to describe dilatation of renal pelvis and calculus associated with progressive atrophy of the kidney due to obstruction to the outflow of urine Refer Robbins 7yh/9,1012,9/e. P950",
+    "cop": 3,
+    "opa": "Hyperplasia",
+    "opb": "Hyperophy",
+    "opc": "Atrophy",
+    "opd": "Dyplasia",
+    "subject_name": "Anatomy",
+    "topic_name": "Urinary tract",
+    "id": "e9ad821a-c438-4965-9f77-760819dfa155",
+    "choice_type": "single"
+  },
+  {
+    "question": "Which vitamin is supplied from only animal source:",
+    "exp": "Ans. (c) Vitamin B12 Ref: Harrison's 19th ed. P 640* Vitamin B12 (Cobalamin) is synthesized solely by microorganisms.* In humans, the only source for humans is food of animal origin, e.g., meat, fish, and dairy products.* Vegetables, fruits, and other foods of nonanimal origin doesn't contain Vitamin B12 .* Daily requirements of vitamin Bp is about 1-3 pg. Body stores are of the order of 2-3 mg, sufficient for 3-4 years if supplies are completely cut off.",
+    "cop": 3,
+    "opa": "Vitamin C",
+    "opb": "Vitamin B7",
+    "opc": "Vitamin B12",
+    "opd": "Vitamin D",
+    "subject_name": "Biochemistry",
+    "topic_name": "Vitamins and Minerals",
+    "id": "e3d3c4e1-4fb2-45e7-9f88-247cc8f373b3",
+    "choice_type": "single"
+  },
+  {
+    "question": "All of the following are surgical options for morbid obesity except -",
+    "exp": "Ans. is 'd' i.e., Roux en Y Duodenal Bypass Bariatric surgical procedures include:a. Vertical banded gastroplastyb. Adjustable gastric bandingc. Roux-en Y gastric bypass (Not - Roux-en Y Duodenal Bypass)d. Biliopancreatic diversione. Duodenal switcho The surgical treatment of morbid obesity is known as bariatric surgery.o Morbid obesity is defined as body mass index of 35 kg/m2 or more with obesity related comorbidity, or BMI of 40 kg/m2 or greater without comorbidity.o Bariatric operations produce weight loss as a result of 2 factors. One is restriction of oralintake. The other is malabsorbtion of ingested food.o Gastric restrictive procedures include Vertical banded gastroplasty & Adjustable gastric bandingo Malabsorbtive procedures include Biliopancreatic diversion, and Duodenal switcho Roux-en Y gastric bypass has features of both restriction and malabsorptionBariatric Operations: Mechanism of ActionRestrictiveVertical banded gastroplastyLaparoscopic adjustable gastric bandingLargely Restrictive/Mildly MalabsorptiveRoux-en-Y gastric bypassLargely Malabsorptive/Mildly RestrictiveBiliopancreatic diversionDuodenal switch",
+    "cop": 4,
+    "opa": "Adjustable gastric banding",
+    "opb": "Biliopancreatic diversion",
+    "opc": "Duodenal Switch",
+    "opd": "Roux en Y Duodenal By pass",
+    "subject_name": "Surgery",
+    "topic_name": "Surgical Treatment Obesity",
+    "id": "5c38bea6-787a-44a9-b2df-88f4218ab914",
+    "choice_type": "multi"
+  }
+]

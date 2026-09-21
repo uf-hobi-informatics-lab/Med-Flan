@@ -1,0 +1,3 @@
+{"taskname": "ner", "context": "Left atrial abnormality.", "question": "extract the disorder concepts", "answer": "Left atrial abnormality"}
+{"taskname": "ner", "context": "Atrial bigeminy and occasional ventricular ectopy.", "question": "extract the disorder concepts", "answer": "Atrial bigeminy, ventricular ectopy"}
+{"taskname": "ner", "context": "Compared to the previous tracing of [**2013-01-14**] sinus rhythm and non-conducted atrial ectopy and ventriciular ectopy have appeared.The rate has slowed.", "question": "extract the disorder concepts", "answer": "ventriciular ectopy, atrial ectopy"}
