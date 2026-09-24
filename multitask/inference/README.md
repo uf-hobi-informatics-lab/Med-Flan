@@ -26,19 +26,48 @@ canonicalize training targets never drift apart.
   `{id: completion}` out as JSON. See its module docstring for the vLLM
   API-version note (`StructuredOutputsParams` vs. the older
   `GuidedDecodingParams`) and for what the grammar can and can't enforce.
+  Its `run()` accepts an optional `llm=` to reuse an already-loaded model
+  across multiple calls instead of reloading per dataset.
+- `run_inference_eval.ipynb` — the multi-task driver: loads the model once,
+  loops `run()` over every dataset under `multitask/data/eval/` (skipping
+  the one stale/empty file), then feeds each dataset's completions straight
+  into `multitask.eval.run_eval.run_eval()` — that dataset's own real
+  scorer, official where one exists. Prints each dataset's full native
+  output (JSON metrics dict, or the official script's own table) plus a
+  best-effort single-number summary row per dataset — deliberately not a
+  unified leaderboard score, since the tasks genuinely use different
+  metrics on different scales. See its own first cell and "Known caveats"
+  section for the full rationale and gotchas (`max_tokens`, discharge-me's
+  literal header-format requirement, grammar-vs-semantic-correctness).
 
 ## Usage
+
+Single dataset, from the command line:
 
 ```bash
 python -m multitask.inference.vllm_structured_infer 2022n2c2_track2_uw \
     --model Qwen/Qwen2.5-7B-Instruct --backend xgrammar --limit 50 \
+    --temperature 0 --enable-thinking false \
+    --sampling-kwarg repetition_penalty=1.1 --sampling-kwarg seed=0 \
     --out completions.json
 
 python -m multitask.eval.run_eval 2022n2c2_track2_uw completions.json
 ```
 
+`--temperature`/`--top-p`/`--top-k` and repeatable `--sampling-kwarg KEY=VALUE`
+(any other `vllm.SamplingParams` field) are all optional — default is greedy
+decoding (`--temperature 0`, **not** vLLM's own default of `1.0`; see the
+module docstring for why). `--enable-thinking {auto,true,false}` toggles the
+Qwen3-style chat-template reasoning switch; needs a vLLM build whose
+`LLM.chat()` accepts `chat_template_kwargs` (confirmed present in 0.19.0,
+absent in 0.6.6.post1) — silently ignored with a printed note otherwise.
+All of these are also `run()` keyword arguments for the Python API.
+
 Swap `2022n2c2_track2_uw` for any dataset name under `multitask/data/eval/`
 (drop the `.jsonl`).
+
+Every task at once: open `run_inference_eval.ipynb`, set `MODEL`/`BACKEND`/
+`LIMIT` in its Config cell, and run top to bottom.
 
 ## Caveats
 
@@ -65,5 +94,6 @@ The grammar constrains JSON *shape*, not semantic correctness:
   a bad choice shows up as a truncation rate instead of masquerading as a
   low-quality model result.
 
-This script is not runnable in a sandbox without `vllm` installed and a
-model available; it's meant to be copied into an environment that has both.
+This script (and the notebook that drives it over every task) is not
+runnable in a sandbox without `vllm` installed and a model available;
+they're meant to be copied into an environment that has both.

@@ -62,10 +62,33 @@ using one global default; pass --max-tokens to override it uniformly. This
 script reports how many completions hit the cap (finish_reason == "length")
 specifically so a bad max_tokens choice shows up as a visible truncation
 rate instead of masquerading as a low-quality model result.
+
+Sampling controls: `temperature`/`top_p`/`top_k` are exposed on both `run()`
+and the CLI, plus a `sampling_kwargs`/`--sampling-kwarg` passthrough for any
+other `vllm.SamplingParams` field (`repetition_penalty`, `seed`, `min_p`,
+...) without this file needing a new named argument every time vLLM adds
+one. **`temperature` defaults to 0.0 (greedy) here, not vLLM's own default
+of 1.0** -- for a script whose purpose is reproducible per-task scoring,
+running every completion at temperature=1.0 with no override (the previous
+behavior, since `_make_sampling_params` never set it at all) meant two runs
+of the same model/dataset could legitimately disagree. Pass
+`--temperature 1.0` (or any value) to restore sampling.
+
+`enable_thinking` (CLI: `--enable-thinking {auto,true,false}`) toggles the
+Qwen3-style chat-template reasoning switch via `LLM.chat()`'s
+`chat_template_kwargs={"enable_thinking": ...}` -- version-sensitive (added
+to vLLM's `LLM.chat()` after this script's originally-targeted release;
+confirmed absent from vLLM 0.6.6.post1, present in 0.19.0), so this falls
+back to the template's own default with a printed note on an older
+install, the same pattern already used for
+StructuredOutputsParams/GuidedDecodingParams below. `"auto"` (the default)
+never passes `chat_template_kwargs` at all, so it's a no-op for any
+model/template that doesn't define `enable_thinking`.
 """
 import argparse
 import json
 from pathlib import Path
+import datasets
 
 from multitask.schemas import PLAIN_TEXT_TASKS
 from multitask.target_schema import json_schema, validate
@@ -90,15 +113,15 @@ _DEFAULT_MAX_TOKENS = 2048
 
 
 def _load_examples(dataset, limit=None):
-    path = EVAL_DIR / f"{dataset}.jsonl"
-    if not path.exists():
-        raise SystemExit(f"no eval file at {path} -- see {EVAL_DIR} for valid dataset names")
-    examples = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            examples.append(json.loads(line))
-            if limit and len(examples) >= limit:
-                break
+    if isinstance(dataset, str):
+        if not Path(dataset).exists():
+            raise SystemExit(f"no eval file at {dataset} -- see {EVAL_DIR} for valid dataset names")
+        examples = datasets.load_dataset("json", data_files=dataset)["test"]
+    else:
+        examples = dataset
+
+    if limit:
+        examples = examples.select(range(limit))
     return examples
 
 
@@ -107,23 +130,26 @@ def _prompt_messages(example):
     return [m for m in example["messages"] if m["role"] != "assistant"]
 
 
-def _make_sampling_params(task, max_tokens):
+def _make_sampling_params(task, max_tokens, temperature=0.0, top_p=1.0, top_k=-1, extra_kwargs=None):
     from vllm import SamplingParams
+
+    common = {"max_tokens": max_tokens, "temperature": temperature, "top_p": top_p, "top_k": top_k}
+    common.update(extra_kwargs or {})
 
     schema = None if task in PLAIN_TEXT_TASKS else json_schema(task)
     if schema is None:
-        return SamplingParams(max_tokens=max_tokens)
+        return SamplingParams(**common)
     try:
         from vllm.sampling_params import StructuredOutputsParams
         return SamplingParams(
             structured_outputs=StructuredOutputsParams(json=schema),
-            max_tokens=max_tokens,
+            **common,
         )
     except ImportError:
         from vllm.sampling_params import GuidedDecodingParams
         return SamplingParams(
             guided_decoding=GuidedDecodingParams(json=schema),
-            max_tokens=max_tokens,
+            **common,
         )
 
 
@@ -136,16 +162,49 @@ def _make_llm(model, backend):
         return LLM(model=model, guided_decoding_backend=backend)
 
 
-def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_path=None):
+def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_path=None, llm=None,
+        temperature=0.0, top_p=1.0, top_k=-1, enable_thinking=None, sampling_kwargs=None):
+    """llm: an already-constructed vllm.LLM to reuse across multiple calls
+    (e.g. looping over every dataset in one notebook session) instead of
+    reloading the model from `model` each time -- pass the same LLM
+    instance returned by a previous `_make_llm(model, backend)` call. When
+    omitted (the CLI path), behavior is unchanged: one dataset, one load.
+
+    temperature/top_p/top_k: applied to every example's SamplingParams (see
+    module docstring for why temperature defaults to 0.0, not vLLM's 1.0).
+    sampling_kwargs: dict of any other vllm.SamplingParams field
+    (repetition_penalty, seed, min_p, ...), passed straight through.
+    enable_thinking: None (default) never touches the chat template; True/
+    False passes chat_template_kwargs={"enable_thinking": ...} to
+    LLM.chat() -- silently no-op'd with a printed note on a vLLM build
+    whose LLM.chat() doesn't accept chat_template_kwargs yet."""
     examples = _load_examples(dataset, limit)
-    llm = _make_llm(model, backend)
+    llm = llm if llm is not None else _make_llm(model, backend)
 
     def _max_tokens_for(task):
         return max_tokens if max_tokens is not None else DEFAULT_MAX_TOKENS.get(task, _DEFAULT_MAX_TOKENS)
 
     conversations = [_prompt_messages(ex) for ex in examples]
-    params = [_make_sampling_params(ex["task"], _max_tokens_for(ex["task"])) for ex in examples]
-    outputs = llm.chat(conversations, params)
+    params = [
+        _make_sampling_params(
+            ex["task"], _max_tokens_for(ex["task"]),
+            temperature=temperature, top_p=top_p, top_k=top_k, extra_kwargs=sampling_kwargs,
+        )
+        for ex in examples
+    ]
+
+    chat_kwargs = {}
+    if enable_thinking is not None:
+        chat_kwargs["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
+    try:
+        outputs = llm.chat(conversations, params, **chat_kwargs)
+    except TypeError:
+        if chat_kwargs:
+            print(
+                "installed vLLM's LLM.chat() has no chat_template_kwargs param -- needs a "
+                "newer vLLM for --enable-thinking; ignoring and using the template's own default."
+            )
+        outputs = llm.chat(conversations, params)
 
     completions = {}
     violations_by_id = {}
@@ -195,6 +254,31 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
     return completions
 
 
+def _parse_sampling_kwargs(pairs):
+    """["repetition_penalty=1.1", "seed=0", "ignore_eos=true"] ->
+    {"repetition_penalty": 1.1, "seed": 0, "ignore_eos": True} -- tries
+    int, then float, then a case-insensitive true/false -> bool, else keeps
+    the raw string. For --sampling-kwarg, any vllm.SamplingParams field not
+    already exposed as its own named flag."""
+    out = {}
+    for pair in pairs:
+        if "=" not in pair:
+            raise SystemExit(f"--sampling-kwarg expects KEY=VALUE, got {pair!r}")
+        key, _, value = pair.partition("=")
+        for caster in (int, float):
+            try:
+                out[key] = caster(value)
+                break
+            except ValueError:
+                continue
+        else:
+            if value.lower() in ("true", "false"):
+                out[key] = value.lower() == "true"
+            else:
+                out[key] = value
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dataset", help="dataset name matching multitask/data/eval/<dataset>.jsonl")
@@ -205,9 +289,34 @@ def main():
         "--max-tokens", type=int, default=None,
         help="override the per-task default in DEFAULT_MAX_TOKENS uniformly for every task",
     )
+    parser.add_argument(
+        "--temperature", type=float, default=0.0,
+        help="sampling temperature (default 0.0 = greedy/deterministic; recommended for "
+             "reproducible eval -- vLLM's own default is 1.0)",
+    )
+    parser.add_argument("--top-p", type=float, default=1.0)
+    parser.add_argument("--top-k", type=int, default=-1)
+    parser.add_argument(
+        "--enable-thinking", choices=["auto", "true", "false"], default="auto",
+        help="Qwen3-style chat-template reasoning toggle, passed as LLM.chat()'s "
+             "chat_template_kwargs={'enable_thinking': ...}. 'auto' leaves the tokenizer's own "
+             "default untouched. Needs a vLLM build with chat_template_kwargs support in "
+             "LLM.chat() (see module docstring) -- silently ignored with a printed note otherwise.",
+    )
+    parser.add_argument(
+        "--sampling-kwarg", action="append", default=[], metavar="KEY=VALUE",
+        help="any other vllm.SamplingParams field, repeatable, e.g. "
+             "--sampling-kwarg repetition_penalty=1.1 --sampling-kwarg seed=0",
+    )
     parser.add_argument("--out", default="completions.json")
     args = parser.parse_args()
-    run(args.dataset, args.model, args.backend, args.limit, args.max_tokens, args.out)
+
+    enable_thinking = {"auto": None, "true": True, "false": False}[args.enable_thinking]
+    run(
+        args.dataset, args.model, args.backend, args.limit, args.max_tokens, args.out,
+        temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
+        enable_thinking=enable_thinking, sampling_kwargs=_parse_sampling_kwargs(args.sampling_kwarg),
+    )
 
 
 if __name__ == "__main__":

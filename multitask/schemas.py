@@ -142,7 +142,10 @@ TASKS = {
         "display": "Summarization",
         "instruction": (
             'Write the discharge instructions and brief hospital course for '
-            'this patient. Return plain text, not JSON.'
+            'this patient. Return plain text, not JSON, in exactly this '
+            'format (the scorer splits on these literal headers): '
+            '"DISCHARGE INSTRUCTIONS:\\n<text>\\n\\nBRIEF HOSPITAL COURSE:'
+            '\\n<text>".'
         ),
     },
     "sts_regression": {
@@ -245,15 +248,20 @@ TASKS = {
             'argument spans. Employment roles: Status, Type (occupation), '
             'Duration, History. LivingStatus roles: Status, Type (alone/'
             'with_family/with_others/homeless), Duration, History. '
-            'Tobacco/Alcohol/Drug roles: Status, Type, Amount, Frequency, '
-            'Method, Duration, History -- Drug covers illicit drugs/'
-            'marijuana/prescription misuse only (not medical use), Tobacco '
-            'covers first-hand smoking only. Status is one of none/current/'
-            'past/future for every trigger type (some values are rare for a '
-            'given type -- e.g. "future" is rare for Tobacco/Alcohol/Drug, '
-            '"none" is rare for LivingStatus -- but none is impossible for '
-            'any of them). Each role filler is {"type", "text"}: type is '
-            'usually the role\'s own name, but a Status filler\'s type is '
+            'Tobacco/Alcohol/Drug roles: Status, Type (the specific substance, '
+            'e.g. "beer"/"wine" for Alcohol, "cocaine"/"marijuana" for Drug, '
+            '"cigarettes" for Tobacco), Amount, Frequency, Method (how it\'s '
+            'consumed, e.g. "smoke"/"inject" -- mostly Drug-only; almost '
+            'never annotated for Alcohol and rare for Tobacco, since smoking '
+            'is the assumed default for both), Duration, History -- Drug '
+            'covers illicit drugs/marijuana/prescription misuse only (not '
+            'medical use), Tobacco covers first-hand smoking only. Status is '
+            'one of none/current/past/future for every trigger type (some '
+            'values are rare for a given type -- e.g. "future" is rare for '
+            'Tobacco/Alcohol/Drug, "none" is rare for LivingStatus -- but '
+            'none is impossible for any of them). Each role filler is '
+            '{"type", "text"}: type is usually the role\'s own name, but a '
+            'Status filler\'s type is '
             'StatusTime (Tobacco/Alcohol/Drug/LivingStatus) or StatusEmploy '
             '(Employment), and LivingStatus\'s Type filler\'s type is '
             'TypeLiving. If a role has more than one filler, number the '
@@ -331,9 +339,15 @@ TASKS = {
             'Extract all problem/test/treatment concepts; for each problem '
             'concept also give its assertion status (present, absent, possible, '
             'conditional, hypothetical, or associated_with_someone_else); and '
-            'extract the relations between concepts (TrIP, TrWP, TrCP, TrAP, '
-            'TrNAP, TeRP, TeCP, PIP). Return JSON {"concepts": [{"id", "type", '
-            '"text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}.'
+            'extract the relations between concepts, one of: TrIP (treatment '
+            'improves problem), TrWP (treatment worsens problem), TrCP '
+            '(treatment causes problem), TrAP (treatment administered for '
+            'problem, outcome not stated), TrNAP (treatment NOT administered '
+            'because of problem), TeRP (test reveals problem), TeCP (test '
+            'conducted to investigate problem, outcome not known), PIP (one '
+            'problem indicates/causes another). Return JSON {"concepts": '
+            '[{"id", "type", "text", "assertion"}, ...], "relations": '
+            '[{"type", "arg1", "arg2"}, ...]}.'
         ),
     },
     # --- Tier A subtask-enrichment tasks (see design.md's "Fixing doc-level
@@ -384,8 +398,11 @@ TASKS = {
             'This note\'s medication triggers have already been identified '
             'and are listed after the note text under EXTRACTED_TRIGGERS, '
             'each with its disposition type. For each Disposition trigger, '
-            'classify its Action, Certainty, Temporality, Actor, and Negation '
-            'attributes. Return JSON {"events": [...]}.'
+            'classify: Action -- Start/Stop/Increase/Decrease/UniqueDose/'
+            'OtherChange/Unknown; Certainty -- Certain/Hypothetical/'
+            'Conditional/Unknown; Temporality -- Past/Present/Future/Unknown; '
+            'Actor -- Physician/Patient/Unknown; Negation -- Negated/'
+            'NotNegated. Return JSON {"events": [...]}.'
         ),
     },
     # --- Paragraph-window task (see design.md's paragraph-chunking
@@ -428,8 +445,13 @@ TASKS = {
             'EXTRACTED_CONCEPTS. For each problem concept, give its assertion '
             'status (present, absent, possible, conditional, hypothetical, or '
             'associated_with_someone_else); and extract the relations between '
-            'concepts (TrIP, TrWP, TrCP, TrAP, TrNAP, TeRP, TeCP, PIP). Return '
-            'JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
+            'concepts, one of: TrIP (treatment improves problem), TrWP '
+            '(treatment worsens problem), TrCP (treatment causes problem), '
+            'TrAP (treatment administered for problem, outcome not stated), '
+            'TrNAP (treatment NOT administered because of problem), TeRP (test '
+            'reveals problem), TeCP (test conducted to investigate problem, '
+            'outcome not known), PIP (one problem indicates/causes another). '
+            'Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
             '"relations": [{"type", "arg1", "arg2"}, ...]}.'
         ),
     },
@@ -448,8 +470,13 @@ TASKS = {
             'in THIS EXCERPT ONLY, give each problem concept\'s assertion '
             'status (present, absent, possible, conditional, hypothetical, or '
             'associated_with_someone_else), and extract the relations between '
-            'concepts (TrIP, TrWP, TrCP, TrAP, TrNAP, TeRP, TeCP, PIP). Return '
-            'JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
+            'concepts, one of: TrIP (treatment improves problem), TrWP '
+            '(treatment worsens problem), TrCP (treatment causes problem), '
+            'TrAP (treatment administered for problem, outcome not stated), '
+            'TrNAP (treatment NOT administered because of problem), TeRP (test '
+            'reveals problem), TeCP (test conducted to investigate problem, '
+            'outcome not known), PIP (one problem indicates/causes another). '
+            'Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
             '"relations": [{"type", "arg1", "arg2"}, ...]}.'
         ),
     },
