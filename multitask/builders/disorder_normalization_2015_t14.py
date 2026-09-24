@@ -39,7 +39,15 @@ def _parse_pipe_line(line, doc_text):
     cui = fields[2]
     text = " ".join(doc_text[a:b] for a, b in spans)
     start = spans[0][0]
-    return start, {"text": text, "cui": cui}
+    # Collapsed (min_start, max_end) over all fragments, same discontinuous-
+    # span convention as multitask/brat.py's BRAT parser and
+    # builders/i2b2_2010.py's concepts -- carried alongside the entity so
+    # convert_back can score gold against its real offsets instead of
+    # reanchoring gold through the same lossy text-search path used for
+    # predictions (see that module's docstring for why the old behavior
+    # made the reported F1 vacuous).
+    char_span = (min(a for a, _ in spans), max(b for _, b in spans))
+    return start, {"text": text, "cui": cui, "_char_span": char_span}
 
 
 def _iter_docs(split):
@@ -61,5 +69,8 @@ def _iter_docs(split):
 
 def build_disorder_normalization(split):
     for doc_id, doc_text, entities in _iter_docs(split):
-        target = {"entities": entities}
+        # "_char_span" is internal (scoring-only, see _parse_pipe_line) --
+        # never part of the trainable JSON target, same convention as
+        # builders/i2b2_2010.py's concepts.
+        target = {"entities": [{"text": e["text"], "cui": e["cui"]} for e in entities]}
         yield example("disorder_normalization", "semeval_2015", split, doc_id, doc_text, target)

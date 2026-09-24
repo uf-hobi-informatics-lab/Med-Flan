@@ -1,98 +1,480 @@
 """
-Task-tag registry for the merged multi-task dataset.
+Two-level task-tag registry for the merged multi-task dataset.
 
 Every training example is rendered as one causal-LM text sequence:
 
-    <<TASK:tag>>
-    <fixed instruction for that tag>
+    <<Category_Display: Task_Display>>
+    <generic category-level framing, shared by every task in the category>
+    <dataset-specific instruction for this task tag>
     INPUT: <source text>
     OUTPUT: <JSON target, single line — or plain text for PLAIN_TEXT_TASKS>
 
-The tag is what lets a single merged model pick the right output schema;
-the instruction sentence is fixed per tag (not per example), so it adds no
-information beyond the tag itself.
+and, in chat-messages form, split across roles:
+
+    system: <<Category_Display: Task_Display>>\\n<generic category framing>
+    user:   <dataset-specific instruction>\\nINPUT: <source text>
+    assistant: OUTPUT target
+
+The tag's two levels serve different purposes: the category (`CATEGORIES`)
+groups tasks by output-contract shape (extraction / classification / QA /
+regression / summarization) and carries the generic, reusable system-level
+framing that a decoder model learns once across every task in that family.
+The task (`TASKS`) is the fine-grained tag that actually selects the output
+schema, and carries the dataset-specific instruction (label sets, JSON key
+names) that must sit next to the input, not buried only in a system prompt.
+
+The task tag string (e.g. "sdoh_event") is also the JSON "task" field used
+by eval/run_eval.py for scorer dispatch and by convert_back/* for schema
+selection — that routing is untouched by this two-level tag; the tag text
+is a model-facing/analysis signal only, never parsed out of rendered text
+by any code in this repo.
 """
 import json
 
-INSTRUCTIONS = {
-    "nli": (
-        'Determine the relationship between the premise and hypothesis: '
-        'entailment, contradiction, or neutral. Return JSON {"label": ...}.'
-    ),
-    "mcqa": (
-        'Answer the multiple-choice question by selecting the correct option '
-        'letter. Return JSON {"answer": <letter>}.'
-    ),
-    "mcqa_explain": (
-        'Answer the multiple-choice question and explain your reasoning. '
-        'Return JSON {"answer": <letter>, "explanation": ...}.'
-    ),
-    "qa_yesnomaybe": (
-        'Answer the research question yes, no, or maybe given the context, '
-        'and give a long-form answer. Return JSON '
-        '{"decision": ..., "long_answer": ...}.'
-    ),
-    "multilabel_cls": (
-        'Assign all applicable topic labels to this article. '
-        'Return JSON {"labels": [...]}.'
-    ),
-    "summarization": (
-        'Write the discharge instructions and brief hospital course for '
-        'this patient. Return plain text, not JSON.'
-    ),
-    "sts_regression": (
-        'Rate the semantic similarity of the two clinical sentences on a '
-        '0-5 scale (0 = unrelated, 5 = semantically equivalent), to two '
-        'decimal places. Return JSON {"similarity": <float, e.g. 3.50>}.'
-    ),
-    "cohort_eligibility": (
-        'Given the patient\'s longitudinal clinical notes and ONE named '
-        'clinical trial eligibility criterion (with its definition), decide '
-        'whether the patient meets that single criterion. '
-        'Return JSON {"label": "met"} or {"label": "not met"}.'
-    ),
-    "ner_re_medication": (
-        'Extract all Drug entities and their attribute entities (Strength, '
-        'Frequency, Dosage, Route, Duration, Form, Reason, ADE), plus the '
-        'relation linking each attribute entity to its drug. '
-        'Return JSON {"entities": [...], "relations": [...]}.'
-    ),
-    "medication_event": (
-        'For each medication mention, classify its disposition '
-        '(Disposition, NoDisposition, or Undetermined); for Disposition '
-        'mentions also give Action, Certainty, Temporality, Actor, and '
-        'Negation. Return JSON {"events": [...]}.'
-    ),
-    "sdoh_event": (
-        'Extract social-determinants-of-health events (e.g. Tobacco, '
-        'Alcohol, Drug, Employment, LivingStatus) with their role-filler '
-        'entities and attribute values. Return JSON {"events": [...]}.'
-    ),
-    "family_history": (
-        'Extract family history from the note. Return JSON with four keys: '
-        '"family_members" (list of {"member", "side"}), "observations_subtask1" '
-        '(list of observation mention strings), "living_status" (list of '
-        '{"member", "side", "score"}), and "observations" (list of {"member", '
-        '"side", "text", "negation"}).'
-    ),
-    "disorder_normalization": (
-        'Identify all disorder mentions in the clinical text and normalize '
-        'each to a UMLS/SNOMED-CT CUI, or "CUI-less" if no matching concept '
-        'exists. Return JSON {"entities": [{"text": ..., "cui": ...}, ...]}.'
-    ),
-    "abbreviation_disambiguation": (
-        'Given a clinical abbreviation and its surrounding context, determine '
-        'what the abbreviation stands for in this specific context. '
-        'Return JSON {"expansion": ...}.'
-    ),
-    "concept_assertion_relation": (
-        'Extract all problem/test/treatment concepts; for each problem '
-        'concept also give its assertion status (present, absent, possible, '
-        'conditional, hypothetical, or associated_with_someone_else); and '
-        'extract the relations between concepts (TrIP, TrWP, TrCP, TrAP, '
-        'TrNAP, TeRP, TeCP, PIP). Return JSON {"concepts": [{"id", "type", '
-        '"text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}.'
-    ),
+from multitask.target_schema import canonicalize
+
+CATEGORIES = {
+    "information_extraction": {
+        "display": "Information_Extraction",
+        "system": (
+            "You are performing information extraction from clinical or "
+            "biomedical text: identify the entities, events, relations, or "
+            "attributes described in the task-specific instructions that "
+            "follow, and return them as the JSON object those instructions "
+            "specify."
+        ),
+    },
+    "classification": {
+        "display": "Classification",
+        "system": (
+            "You are performing text classification: read the input and "
+            "assign it the label(s) described in the task-specific "
+            "instructions that follow, and return them as the JSON object "
+            "those instructions specify."
+        ),
+    },
+    "question_answering": {
+        "display": "Question_Answering",
+        "system": (
+            "You are performing question answering: read the question and "
+            "any supporting context or options, and answer it as described "
+            "in the task-specific instructions that follow, returning the "
+            "JSON object those instructions specify."
+        ),
+    },
+    "similarity_regression": {
+        "display": "Similarity_Regression",
+        "system": (
+            "You are performing similarity or regression scoring: read the "
+            "input and produce the numeric score described in the "
+            "task-specific instructions that follow, returning the JSON "
+            "object those instructions specify."
+        ),
+    },
+    "summarization": {
+        "display": "Summarization",
+        "system": (
+            "You are performing summarization: read the input and produce "
+            "the summary described in the task-specific instructions that "
+            "follow."
+        ),
+    },
+}
+
+# Task-level registry. Each entry's "instruction" text is unchanged from the
+# old flat INSTRUCTIONS dict (dataset-specific label sets / JSON schema) —
+# only "category" and "display" are new, except for the four IE tasks
+# (ner_re_medication, medication_event, sdoh_event, family_history) whose
+# instructions were rewritten into Task/Definitions/OutputFormat sections
+# with paper/guideline-grounded entity/attribute/event definitions (see
+# design.md). "category" placements that are not clean-cut are noted
+# inline; see design.md's Task Taxonomy > Ambiguous placements section for
+# the full rationale.
+TASKS = {
+    "nli": {
+        "category": "classification",
+        "display": "NLI",
+        "instruction": (
+            'Determine the relationship between the premise and hypothesis: '
+            'entailment, contradiction, or neutral. Return JSON {"label": ...}.'
+        ),
+    },
+    "mcqa": {
+        "category": "question_answering",
+        "display": "MCQA",
+        "instruction": (
+            'Answer the multiple-choice question by selecting the correct option '
+            'letter. Return JSON {"answer": <letter>}.'
+        ),
+    },
+    "mcqa_explain": {
+        "category": "question_answering",
+        "display": "MCQA_Explain",
+        "instruction": (
+            'Answer the multiple-choice question and explain your reasoning. '
+            'Return JSON {"answer": <letter>, "explanation": ...}.'
+        ),
+    },
+    # Hybrid: the "decision" field is a closed yes/no/maybe label
+    # (classification-shaped), but the task is framed as question + context
+    # -> answer, like mcqa/mcqa_explain, and is PubMedQA's native
+    # leaderboard framing -- categorized as question_answering. See
+    # design.md's Ambiguous placements section.
+    "qa_yesnomaybe": {
+        "category": "question_answering",
+        "display": "QA_YesNoMaybe",
+        "instruction": (
+            'Answer the research question yes, no, or maybe given the context, '
+            'and give a long-form answer. Return JSON '
+            '{"decision": ..., "long_answer": ...}.'
+        ),
+    },
+    "multilabel_cls": {
+        "category": "classification",
+        "display": "Multilabel_Topic",
+        "instruction": (
+            'Assign all applicable topic labels to this article. '
+            'Return JSON {"labels": [...]}.'
+        ),
+    },
+    "summarization": {
+        "category": "summarization",
+        "display": "Summarization",
+        "instruction": (
+            'Write the discharge instructions and brief hospital course for '
+            'this patient. Return plain text, not JSON.'
+        ),
+    },
+    "sts_regression": {
+        "category": "similarity_regression",
+        "display": "STS_Regression",
+        "instruction": (
+            'Rate the semantic similarity of the two clinical sentences on a '
+            '0-5 scale (0 = unrelated, 5 = semantically equivalent), to two '
+            'decimal places. Return JSON {"similarity": <float, e.g. 3.50>}.'
+        ),
+    },
+    "sts_classification": {
+        "category": "classification",
+        "display": "STS_Classification",
+        "instruction": (
+            'Classify the semantic similarity of the two clinical sentences '
+            'into one of 5 categories: "dissimilar" (unrelated, or share no '
+            'clinically meaningful information), "weakly_related" (same '
+            'general topic but very different clinical content), '
+            '"partially_equivalent" (share important clinical information '
+            'but differ in other important details), "mostly_equivalent" '
+            '(same essential clinical meaning, only minor/unimportant '
+            'details differ), or "highly_equivalent" (semantically '
+            'equivalent or nearly so). Return JSON {"category": <one of the '
+            '5 values above, as a string>}.'
+        ),
+    },
+    "cohort_eligibility": {
+        "category": "classification",
+        "display": "Cohort_Eligibility",
+        "instruction": (
+            'Given the patient\'s longitudinal clinical notes and ONE named '
+            'clinical trial eligibility criterion (with its definition), decide '
+            'whether the patient meets that single criterion. '
+            'Return JSON {"label": "met"} or {"label": "not met"}.'
+        ),
+    },
+    "ner_re_medication": {
+        "category": "information_extraction",
+        "display": "NER_RE",
+        "instruction": (
+            'Task: Extract every Drug mention in this note and its linked '
+            'clinical attributes, per the 2018 n2c2 Track 2 ADE/medication-'
+            'extraction schema (Henry et al. 2020, JAMIA).\n'
+            'Definitions: Drug = a medication name (generic, brand, or drug '
+            'class). Strength = amount of active ingredient per dose unit '
+            '(e.g. "40 mg"). Form = the drug\'s physical form (e.g. tablet, '
+            'patch, cream). Dosage = amount given per administration (e.g. '
+            '"2 tablets"). Frequency = how often it\'s taken (e.g. "twice '
+            'daily"). Route = how it enters the body (e.g. "PO", "IV", '
+            '"topically"). Duration = how long it is/was taken. Reason = the '
+            'medical indication for the drug. ADE = an adverse reaction '
+            'attributed to the drug. Each attribute links to the Drug '
+            'mention(s) it describes -- any attribute type may link to more '
+            'than one Drug, most often Reason/ADE (e.g. one shared side '
+            'effect attributed to two co-administered drugs).\n'
+            'OutputFormat: Nest each attribute mention under its linked '
+            'Drug, keyed by attribute type -- omit attribute types with no '
+            'mentions; list any attribute mention not linked to any drug '
+            'under "unlinked". Return JSON {"drugs": [{"text": ..., '
+            '"<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}.'
+        ),
+    },
+    "medication_event": {
+        "category": "information_extraction",
+        "display": "Medication_Event",
+        "instruction": (
+            'Task: For each medication mention, classify whether a '
+            'medication change is discussed, per the CMED schema (Mahajan '
+            'et al. 2021).\n'
+            'Definitions: Disposition = a change is discussed (e.g. "start '
+            'Plavix"). NoDisposition = no change is discussed (e.g. '
+            '"continue lisinopril"). Undetermined = unclear from local '
+            'context (e.g. "Plan: Lasix"). For each Disposition mention, '
+            'also classify: Action -- Start/Stop/Increase/Decrease/'
+            'UniqueDose/OtherChange/Unknown; Certainty -- Certain/'
+            'Hypothetical/Conditional/Unknown; Temporality -- Past/Present/'
+            'Future/Unknown; Actor -- Physician/Patient/Unknown; Negation -- '
+            'Negated/NotNegated. A single mention may have 0, 1, or more '
+            'Disposition events.\n'
+            'OutputFormat: "trigger_text" is the medication mention itself '
+            '(the entity type in this task is always a medication -- '
+            '"trigger" names its role as what triggers the event, per this '
+            'schema\'s event-extraction terminology, not a different kind of '
+            'span). Return JSON {"events": [{"id", "type", '
+            '"trigger_text", "attributes": {"Action", "Certainty", '
+            '"Temporality", "Actor", "Negation"}}, ...]} -- "attributes" is '
+            'empty for NoDisposition/Undetermined events.'
+        ),
+    },
+    "sdoh_event": {
+        "category": "information_extraction",
+        "display": "SDoH",
+        "instruction": (
+            'Task: Extract social-determinants-of-health (SDOH) events from '
+            'this note, per the SHAC annotation schema (Lybarger et al., '
+            '2022 n2c2 Track 2).\n'
+            'Definitions: an SDOH event is a trigger span (Employment, '
+            'LivingStatus, Tobacco, Alcohol, or Drug) plus role-labeled '
+            'argument spans. Employment roles: Status, Type (occupation), '
+            'Duration, History. LivingStatus roles: Status, Type (alone/'
+            'with_family/with_others/homeless), Duration, History. '
+            'Tobacco/Alcohol/Drug roles: Status, Type, Amount, Frequency, '
+            'Method, Duration, History -- Drug covers illicit drugs/'
+            'marijuana/prescription misuse only (not medical use), Tobacco '
+            'covers first-hand smoking only. Status is one of none/current/'
+            'past/future for every trigger type (some values are rare for a '
+            'given type -- e.g. "future" is rare for Tobacco/Alcohol/Drug, '
+            '"none" is rare for LivingStatus -- but none is impossible for '
+            'any of them). Each role filler is {"type", "text"}: type is '
+            'usually the role\'s own name, but a Status filler\'s type is '
+            'StatusTime (Tobacco/Alcohol/Drug/LivingStatus) or StatusEmploy '
+            '(Employment), and LivingStatus\'s Type filler\'s type is '
+            'TypeLiving. If a role has more than one filler, number the '
+            'extras: Type2/Type3, Amount2/Amount3, Duration2, Frequency2, '
+            'History2, Method2/Method3. Status/Type fillers carry their own '
+            'attribute value keyed by name -- StatusTimeVal (none/current/'
+            'past/future), StatusEmployVal (employed/unemployed/retired/'
+            'on_disability/student/homemaker), or TypeLivingVal (alone/'
+            'with_family/with_others/homeless).\n'
+            'OutputFormat: Return JSON {"events": [{"id", "type", '
+            '"trigger_text", "roles": {"<RoleName>": {"type", "text"}, ...}, '
+            '"attributes": [{"role", "name", "value"}, ...]}, ...]}.'
+        ),
+    },
+    "family_history": {
+        "category": "information_extraction",
+        "display": "Family_History",
+        "instruction": (
+            'Task: Extract family history from the note as an end-to-end '
+            'summary of member/side/living-status/observation, per the 2019 '
+            'n2c2 Track 2 Subtask 2 schema (Liu et al. 2018, BioCreative/'
+            'OHNLP).\n'
+            'Definitions: FamilyMember is one of Father/Mother/Parent/'
+            'Sister/Brother/Daughter/Son/Child/Grandmother/Grandfather/'
+            'Grandparent/Cousin/Sibling/Aunt/Uncle, each with a side of '
+            'family (Paternal/Maternal/NA -- first-degree relatives are '
+            'always NA). Observation is a disease/condition mentioned for a '
+            'family member. LivingStatus score = alive_score * '
+            'healthy_score, each in {Yes=2, NA=1, No=0} (so 4 = alive and '
+            'healthy, 0 = deceased). Only report a member here if the note '
+            'gives a living-status score and/or at least one observation '
+            'for them -- a member mentioned with neither is not part of '
+            'this summary.\n'
+            'OutputFormat: Return JSON with 2 keys: "living_status" (list '
+            'of {"member", "side", "score"}), "observations" (list of '
+            '{"member", "side", "text", "negation": "Negated"|'
+            '"Non_Negated"}).'
+        ),
+    },
+    "disorder_normalization": {
+        "category": "information_extraction",
+        "display": "Disorder_Normalization",
+        "instruction": (
+            'Identify all disorder mentions in the clinical text and normalize '
+            'each to a UMLS/SNOMED-CT CUI, or "CUI-less" if no matching concept '
+            'exists. Return JSON {"entities": [{"text": ..., "cui": ...}, ...]}.'
+        ),
+    },
+    # Word-sense disambiguation: the label set (candidate expansions) is not
+    # enumerated in-prompt, but the task is fundamentally "pick the correct
+    # sense given context" -- categorized as classification. See design.md's
+    # Ambiguous placements section.
+    "abbreviation_disambiguation": {
+        "category": "classification",
+        "display": "Abbreviation_Disambiguation",
+        "instruction": (
+            'Given a clinical abbreviation and its surrounding context, determine '
+            'what the abbreviation stands for in this specific context. '
+            'Return JSON {"expansion": ...}.'
+        ),
+    },
+    "qa_span_extraction": {
+        "category": "question_answering",
+        "display": "QA_Span_Extraction",
+        "instruction": (
+            'Given the clinical note context and a question, extract the exact '
+            'answer as a verbatim substring of the context. Return JSON '
+            '{"answer": <exact substring of the context>}.'
+        ),
+    },
+    "concept_assertion_relation": {
+        "category": "information_extraction",
+        "display": "Concept_Assertion_Relation",
+        "instruction": (
+            'Extract all problem/test/treatment concepts; for each problem '
+            'concept also give its assertion status (present, absent, possible, '
+            'conditional, hypothetical, or associated_with_someone_else); and '
+            'extract the relations between concepts (TrIP, TrWP, TrCP, TrAP, '
+            'TrNAP, TeRP, TeCP, PIP). Return JSON {"concepts": [{"id", "type", '
+            '"text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}.'
+        ),
+    },
+    # --- Tier A subtask-enrichment tasks (see design.md's "Fixing doc-level
+    # training-data scarcity" section) -- train-only, additive re-framings of
+    # ner_re_medication/medication_event's own gold annotations into an
+    # easier pipeline-stage sub-task. "Subtask" is baked into the display
+    # string so the rendered tag is unmistakably distinct from the parent
+    # end-to-end task's tag. See SUBTASK_OF below for the parent mapping.
+    # These never appear in multitask/data/eval/ or train_unified.jsonl --
+    # only in their own multitask/huggingface_format/<name>/ directory.
+    "ner_re_medication_ner_only": {
+        "category": "information_extraction",
+        "display": "NER_RE_Subtask_NERonly",
+        "instruction": (
+            'Extract every Drug, Strength, Frequency, Dosage, Route, Duration, '
+            'Form, Reason, and ADE mention span in the text -- entities only, '
+            'no relation linking. Return JSON {"entities": [{"type": ..., '
+            '"text": ...}, ...]}.'
+        ),
+    },
+    "ner_re_medication_re_only": {
+        "category": "information_extraction",
+        "display": "NER_RE_Subtask_REonly",
+        "instruction": (
+            'This note\'s Drug/Strength/Frequency/Dosage/Route/Duration/Form/'
+            'Reason/ADE entities have already been extracted and are listed '
+            'after the note text under EXTRACTED_ENTITIES. Link each non-Drug '
+            'entity to the Drug mention it describes (an entity may link to '
+            'more than one Drug); collect any entity never linked to a Drug '
+            'under "unlinked". Return JSON {"drugs": [{"text": ..., '
+            '"<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}.'
+        ),
+    },
+    "medication_event_trigger_only": {
+        "category": "information_extraction",
+        "display": "Medication_Event_Subtask_TriggerOnly",
+        "instruction": (
+            'Extract every medication mention span and classify its '
+            'disposition type (Disposition, NoDisposition, or Undetermined) '
+            '-- triggers only, no attribute classification. Return JSON '
+            '{"triggers": [{"type": ..., "text": ...}, ...]}.'
+        ),
+    },
+    "medication_event_attr_only": {
+        "category": "information_extraction",
+        "display": "Medication_Event_Subtask_AttrOnly",
+        "instruction": (
+            'This note\'s medication triggers have already been identified '
+            'and are listed after the note text under EXTRACTED_TRIGGERS, '
+            'each with its disposition type. For each Disposition trigger, '
+            'classify its Action, Certainty, Temporality, Actor, and Negation '
+            'attributes. Return JSON {"events": [...]}.'
+        ),
+    },
+    # --- Paragraph-window task (see design.md's paragraph-chunking
+    # section) -- a distinct mechanism from the Tier A subtasks above: this
+    # re-frames ner_re_medication's own gold annotations onto a genuinely
+    # smaller, distinct text span (one paragraph) rather than relabeling
+    # the same whole-note text. HF-only, additive; never appears in
+    # multitask/data/eval/ or train_unified.jsonl -- see PARAGRAPH_OF below.
+    "ner_re_medication_paragraph": {
+        "category": "information_extraction",
+        "display": "NER_RE_Paragraph_Window",
+        "instruction": (
+            'This is one paragraph excerpted from a larger clinical note, not '
+            'the complete note. Extract every Drug, Strength, Frequency, '
+            'Dosage, Route, Duration, Form, Reason, and ADE mention in THIS '
+            'EXCERPT ONLY and link each non-Drug entity to the Drug mention it '
+            'describes. Return JSON {"drugs": [{"text": ..., "<AttrType>": '
+            '[...], ...}, ...], "unlinked": [{"type", "text"}, ...]}.'
+        ),
+    },
+    # --- Tier A subtask-enrichment tasks for concept_assertion_relation
+    # (2010_i2b2_va) -- same train-only/HF-only convention as the
+    # ner_re_medication/medication_event subtasks above. See SUBTASK_OF below.
+    "concept_assertion_relation_ner_only": {
+        "category": "information_extraction",
+        "display": "Concept_Assertion_Relation_Subtask_NERonly",
+        "instruction": (
+            'Extract every problem, test, and treatment concept mention span '
+            'in the text -- concepts only, no assertion classification, no '
+            'relation linking. Return JSON {"concepts": [{"type": ..., '
+            '"text": ...}, ...]}.'
+        ),
+    },
+    "concept_assertion_relation_re_only": {
+        "category": "information_extraction",
+        "display": "Concept_Assertion_Relation_Subtask_REonly",
+        "instruction": (
+            'This note\'s problem/test/treatment concepts have already been '
+            'extracted and are listed after the note text under '
+            'EXTRACTED_CONCEPTS. For each problem concept, give its assertion '
+            'status (present, absent, possible, conditional, hypothetical, or '
+            'associated_with_someone_else); and extract the relations between '
+            'concepts (TrIP, TrWP, TrCP, TrAP, TrNAP, TeRP, TeCP, PIP). Return '
+            'JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
+            '"relations": [{"type", "arg1", "arg2"}, ...]}.'
+        ),
+    },
+    # --- Section-window task for concept_assertion_relation (2010_i2b2_va)
+    # -- same mechanism as ner_re_medication_paragraph above (new text
+    # spans, not relabeled ones), but boundaries are ALL-CAPS section
+    # headers instead of blank lines -- this format has none (see
+    # chunk_utils.section_spans). HF-only, additive; see PARAGRAPH_OF below.
+    "concept_assertion_relation_section": {
+        "category": "information_extraction",
+        "display": "Concept_Assertion_Relation_Section_Window",
+        "instruction": (
+            'This is one section excerpted from a larger clinical note (e.g. '
+            '"HISTORY OF PRESENT ILLNESS", "PAST MEDICAL HISTORY"), not the '
+            'complete note. Extract every problem, test, and treatment concept '
+            'in THIS EXCERPT ONLY, give each problem concept\'s assertion '
+            'status (present, absent, possible, conditional, hypothetical, or '
+            'associated_with_someone_else), and extract the relations between '
+            'concepts (TrIP, TrWP, TrCP, TrAP, TrNAP, TeRP, TeCP, PIP). Return '
+            'JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
+            '"relations": [{"type", "arg1", "arg2"}, ...]}.'
+        ),
+    },
+}
+
+# Tier A subtask task-tag -> parent end-to-end task-tag. Single source of
+# truth for "is this a Tier A subtask" and "which real task does it
+# enrich" -- used by hf_dataset_stats.py's README generation instead of
+# pattern-matching on dataset-name suffixes.
+SUBTASK_OF = {
+    "ner_re_medication_ner_only": "ner_re_medication",
+    "ner_re_medication_re_only": "ner_re_medication",
+    "medication_event_trigger_only": "medication_event",
+    "medication_event_attr_only": "medication_event",
+    "concept_assertion_relation_ner_only": "concept_assertion_relation",
+    "concept_assertion_relation_re_only": "concept_assertion_relation",
+}
+
+# Paragraph-window task-tag -> parent end-to-end task-tag. Kept separate
+# from SUBTASK_OF on purpose -- a distinct mechanism (new text spans, not
+# new labels on old text) -- so hf_dataset_stats.py can report it under
+# its own heading rather than conflating the two.
+PARAGRAPH_OF = {
+    "ner_re_medication_paragraph": "ner_re_medication",
+    "concept_assertion_relation_section": "concept_assertion_relation",
 }
 
 # The 13 fixed cohort-eligibility criteria (2018 n2c2 Track 1), in the order
@@ -145,47 +527,83 @@ def cohort_criterion_prompt(criterion: str) -> str:
 PLAIN_TEXT_TASKS = {"summarization"}
 
 
+def _check_task(task: str) -> None:
+    if task not in TASKS:
+        raise ValueError(f"unknown task tag: {task!r}")
+
+
+def _target_str(task: str, target) -> str:
+    if task in PLAIN_TEXT_TASKS:
+        return target if isinstance(target, str) else str(target)
+    # Canonical key order via the single-source-of-truth spec in
+    # multitask/target_schema.py. Without it, key order is inherited from
+    # gold-file layout, so the same attribute/role key-set serializes
+    # several different ways across examples -- contradictory supervision
+    # on serialization for identical content.
+    return json.dumps(canonicalize(task, target), ensure_ascii=False)
+
+
+def tag(task: str) -> str:
+    """The two-level model-facing tag, e.g. '<<Information Extraction: SDoH>>'.
+
+    Renders the stored underscore-joined `display` identifiers
+    (`Information_Extraction`, `Concept_Assertion_Relation`, ...) with
+    spaces instead, at render time only -- the underscores stay in `TASKS`/
+    `CATEGORIES` since other code (hf_dataset_stats.py's generated README
+    table, design.md) still references them as identifiers. Measured impact
+    across all 25 task tags: 280 -> 235 cl100k tokens (16% fewer), because
+    BPE has real merges for " Extraction"/" Assertion"/" Relation" as
+    tokens but not for "_Ex"/"traction"/"_Ass"/"ert"/"ion" -- the
+    underscore-joined form forces the tokenizer through several junk
+    subword pieces that carry no semantic content the model can bind to.
+    """
+    _check_task(task)
+    meta = TASKS[task]
+    category = CATEGORIES[meta["category"]]
+    cat_disp = category["display"].replace("_", " ")
+    task_disp = meta["display"].replace("_", " ")
+    return f"<<{cat_disp}: {task_disp}>>"
+
+
 def render(task: str, input_text: str, target) -> str:
     """Render one training example as a single causal-LM text sequence."""
-    if task not in INSTRUCTIONS:
-        raise ValueError(f"unknown task tag: {task!r}")
-    if task in PLAIN_TEXT_TASKS:
-        target_str = target if isinstance(target, str) else str(target)
-    else:
-        target_str = json.dumps(target, ensure_ascii=False)
+    _check_task(task)
+    meta = TASKS[task]
+    category = CATEGORIES[meta["category"]]
     return (
-        f"<<TASK:{task}>>\n"
-        f"{INSTRUCTIONS[task]}\n"
+        f"{tag(task)}\n"
+        f"{category['system']}\n"
+        f"{meta['instruction']}\n"
         f"INPUT: {input_text}\n"
-        f"OUTPUT: {target_str}"
+        f"OUTPUT: {_target_str(task, target)}"
     )
 
 
 def render_messages(task: str, input_text: str, target) -> list:
     """Render one training example as OpenAI-style chat messages, so
-    tokenizer.apply_chat_template() can be applied directly. The task tag +
-    fixed instruction go in the system turn, the source text is the user
-    turn, and the (JSON, or plain text for PLAIN_TEXT_TASKS) target is the
-    assistant turn."""
-    if task not in INSTRUCTIONS:
-        raise ValueError(f"unknown task tag: {task!r}")
-    if task in PLAIN_TEXT_TASKS:
-        target_str = target if isinstance(target, str) else str(target)
-    else:
-        target_str = json.dumps(target, ensure_ascii=False)
+    tokenizer.apply_chat_template() can be applied directly. The two-level
+    tag + generic category framing go in the system turn (shared by every
+    task in the category); the dataset-specific instruction + source text
+    form the user turn; the (JSON, or plain text for PLAIN_TEXT_TASKS)
+    target is the assistant turn."""
+    _check_task(task)
+    meta = TASKS[task]
+    category = CATEGORIES[meta["category"]]
     return [
-        {"role": "system", "content": f"<<TASK:{task}>>\n{INSTRUCTIONS[task]}"},
-        {"role": "user", "content": input_text},
-        {"role": "assistant", "content": target_str},
+        {"role": "system", "content": f"{tag(task)}\n{category['system']}"},
+        {"role": "user", "content": f"{meta['instruction']}\nINPUT: {input_text}"},
+        {"role": "assistant", "content": _target_str(task, target)},
     ]
 
 
 def example(task, dataset, split, locator, input_text, target):
     """Build one unified-dataset record. Carries both the flat causal-LM
     text sequence (used by build_unified_dataset.py/token_stats.py) and the
-    OpenAI-style chat messages (used by build_hf_datasets.py)."""
+    OpenAI-style chat messages (used by build_hf_datasets.py), plus the
+    task's category as per-example metadata."""
     return {
         "task": task,
+        "category": TASKS[task]["category"],
         "dataset": dataset,
         "split": split,
         "id": locator,

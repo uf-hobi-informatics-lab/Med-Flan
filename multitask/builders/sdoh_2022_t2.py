@@ -7,6 +7,15 @@ Employment, LivingStatus) plus role-labeled argument entities (Status,
 Amount, Degree, Duration, Type, ...), bundled by an E-line. Attribute
 values (StatusTimeVal, StatusEmployVal, ...) qualify specific role fillers
 via A-lines pointing at the filler's T-line id.
+
+The release has two independent sources, MIMIC and UW, each with its own
+train/dev/test split under 2022n2c2_track2/<split>/<source>/ -- kept as two
+separate datasets (2022n2c2_track2_mimic, 2022n2c2_track2_uw), never
+merged, since the two sources come from different institutions/annotators.
+The UW test split additionally ships a relation-form re-annotation of the
+same events (2022n2c2_track2/test/uw_r/, no matching .txt files) -- that's
+handled separately in multitask.convert_back.sdoh_2022_t2 as a derived,
+test-only auxiliary evaluation axis, not part of this builder's target.
 """
 from pathlib import Path
 
@@ -15,15 +24,17 @@ from multitask.io_utils import read_text
 from multitask.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2022n2c2_track2/Track2_SubtaskA/Annotations"
-SPLIT_DIRS = {"train": BASE / "train" / "mimic", "dev": BASE / "dev" / "mimic"}
-# No official test split present locally for SHAC, and no bundled scorer either
-# (flagged in the plan -- eval for this dataset will be best-effort/unofficial).
+BASE = ROOT / "2022n2c2_track2"
+SOURCES = ("mimic", "uw")
 
 
-def build_sdoh_event(split):
-    split_dir = SPLIT_DIRS.get(split)
-    if split_dir is None or not split_dir.exists():
+def _split_dir(source, split):
+    return BASE / split / source
+
+
+def build_sdoh_event(source, split):
+    split_dir = _split_dir(source, split)
+    if not split_dir.exists():
         return
     for txt_path in sorted(split_dir.glob("*.txt")):
         ann_path = txt_path.with_suffix(".ann")
@@ -64,4 +75,4 @@ def build_sdoh_event(split):
         events.sort(key=lambda e: e.pop("_start"))
 
         target = {"events": events}
-        yield example("sdoh_event", "2022n2c2_track2", split, txt_path.stem, doc_text, target)
+        yield example("sdoh_event", f"2022n2c2_track2_{source}", split, txt_path.stem, doc_text, target)

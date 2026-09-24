@@ -40,4 +40,13 @@ sample = {k: data[k] for k in list(data.keys())[:N]}
 with open(f"{SD}/pubmedqa/ori_pqaa.sample.json", "w") as f:
     json.dump(sample, f, indent=2)
 
+# emrqa-msquad: parquet -> first N rows as jsonl
+df = pd.read_parquet(f"{BASE}/emrqa-msquad/raw/train-00000-of-00001.parquet")
+with open(f"{SD}/emrqa-msquad/sample.jsonl", "w") as f:
+    for _, row in df.head(N).iterrows():
+        f.write(json.dumps({
+            "context": row["context"], "question": row["question"],
+            "answers": {k: [int(x) if hasattr(x, "item") else x for x in v] for k, v in row["answers"].items()},
+        }) + "\n")
+
 print("done")

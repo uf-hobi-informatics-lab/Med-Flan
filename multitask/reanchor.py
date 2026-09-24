@@ -46,8 +46,20 @@ def reanchor(entity_text, doc_text, used_spans, min_start=0, near=None):
 
     Falls back to case-insensitive search if an exact-case match isn't
     found anywhere. Returns (start, end), or None if the text can't be
-    found at all (the caller should drop the entity -- a miss against gold,
-    which is the correct and conservative behavior for scoring)."""
+    found at all.
+
+    A None here means the caller has a syntactically real prediction with
+    nowhere to put it -- **not** license to silently drop it. Every BRAT
+    converter and convert_back/i2b2_2010.py give such a prediction a
+    "poison span" (past the document, guaranteed to never overlap a real
+    gold span) instead of omitting it, specifically so it still counts as
+    an attempted (and wrong) prediction in scoring. An earlier version of
+    this docstring called dropping it "the correct and conservative
+    behavior for scoring" -- that was backwards: every precision
+    denominator in this codebase only ever counts what a caller actually
+    keeps, so dropping an unresolvable prediction made it free to
+    hallucinate. See any of those callers' `to_ann`/`_resolve_*` functions
+    for the poison-span pattern."""
     pattern = _flex_pattern(entity_text)
     if pattern is None:
         return None

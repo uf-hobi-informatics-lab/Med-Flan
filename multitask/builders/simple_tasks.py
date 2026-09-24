@@ -3,6 +3,8 @@ Builders for datasets that are already close to decoder-only generation
 format — no structural reformatting needed, just wrapping the existing
 label/answer into the JSON target shape for their task tag.
 """
+import json
+import re
 from pathlib import Path
 
 from multitask.io_utils import iter_csv, iter_csv_gz, iter_json_dict, iter_jsonl, read_csv_gz_dict
@@ -23,6 +25,38 @@ def build_mednli(split):
     for i, rec in iter_jsonl(path):
         input_text = f"Premise: {rec['sentence1']}\nHypothesis: {rec['sentence2']}"
         yield example("nli", "MedNLI", split, f"{path.name}#{i}", input_text, {"label": rec["gold_label"]})
+
+
+# ---------------------------------------------------------------------------
+# bionli -- adversarially-generated biomedical NLI (same "nli" task/schema
+# as MedNLI: Premise/Hypothesis input, {"label": "entailment"|"contradiction"}
+# target, binary only -- no neutral class here, confirmed by exhaustive scan
+# of label_cat below)
+# ---------------------------------------------------------------------------
+BIONLI_DIR = ROOT / "bionli" / "raw"
+BIONLI_SPLITS = {"train": "train_balanced.csv", "dev": "dev_balanced.csv", "test": "test.csv"}
+# <el>/<le> and <re>/<er> are literal unescaped entity-highlight markup
+# around mentions in `conclusion` -- confirmed by direct sampling -- stripped
+# so the hypothesis reads as plain prose like MedNLI's.
+
+
+def _strip_bionli_tags(text):
+    return re.sub(r"\s+", " ", re.sub(r"<el>|<le>|<re>|<er>", "", text)).strip()
+
+
+def build_bionli(split):
+    path = BIONLI_DIR / BIONLI_SPLITS[split]
+    for i, rec in iter_csv(path):
+        hypothesis = _strip_bionli_tags(rec["conclusion"])
+        # Only label_cat == "pos" is a true entailment; every other value is
+        # one of bionli's adversarial-negative-generation categories (SEN,
+        # SEP, SREO, LPR, swap_number, generation, generation_nd, posToNeg,
+        # negToPos, generation_nd_SEN, generation_nd_SRE, SRE, ...) --
+        # confirmed by exhaustively scanning label_cat across all three
+        # splits -- so this is a binary entailment/contradiction task.
+        label = "entailment" if rec["label_cat"] == "pos" else "contradiction"
+        input_text = f"Premise: {rec['supp_set']}\nHypothesis: {hypothesis}"
+        yield example("nli", "bionli", split, f"{path.name}#{i}", input_text, {"label": label})
 
 
 # ---------------------------------------------------------------------------
@@ -166,3 +200,46 @@ def build_umn_abbreviation(split):
             input_text = f"Abbreviation: {abbr}\n{header}Context: {text}"
             yield example("abbreviation_disambiguation", "umn_abbreviation", split,
                           f"{path.name}#{i}", input_text, {"expansion": expansion})
+
+
+# ---------------------------------------------------------------------------
+# nli4ct -- clinical-trial-report NLI (same "nli" task/schema as MedNLI:
+# Premise/Hypothesis input, {"label": "entailment"|"contradiction"} target,
+# binary only -- confirmed no neutral class across train/dev/Gold_test)
+# ---------------------------------------------------------------------------
+NLI4CT_DIR = ROOT / "nli4ct" / "raw" / "Complete_dataset"
+NLI4CT_SPLITS = {"train": "train.json", "dev": "dev.json", "test": "Gold_test.json"}
+NLI4CT_CT_DIR = NLI4CT_DIR / "CT json"
+
+
+def _nli4ct_ct_cache():
+    cache = {}
+    for path in NLI4CT_CT_DIR.glob("*.json"):
+        with open(path, encoding="utf-8") as f:
+            cache[path.stem] = json.load(f)
+    return cache
+
+
+def _nli4ct_section_text(ct, section_id):
+    lines = ct.get(section_id) or []
+    return "\n".join(lines) if isinstance(lines, list) else str(lines)
+
+
+def build_nli4ct(split):
+    path = NLI4CT_DIR / NLI4CT_SPLITS[split]
+    ct_by_id = _nli4ct_ct_cache()
+    for rec_id, rec in iter_json_dict(path):
+        primary_ct = ct_by_id.get(rec["Primary_id"], {})
+        primary_text = _nli4ct_section_text(primary_ct, rec["Section_id"])
+        if rec["Type"] == "Comparison":
+            secondary_ct = ct_by_id.get(rec["Secondary_id"], {})
+            secondary_text = _nli4ct_section_text(secondary_ct, rec["Section_id"])
+            premise = (
+                f"Trial 1 ({rec['Primary_id']}):\n{primary_text}\n\n"
+                f"Trial 2 ({rec['Secondary_id']}):\n{secondary_text}"
+            )
+        else:
+            premise = primary_text
+        input_text = f"Premise: {premise}\nHypothesis: {rec['Statement']}"
+        label = rec["Label"].lower()
+        yield example("nli", "nli4ct", split, rec_id, input_text, {"label": label})

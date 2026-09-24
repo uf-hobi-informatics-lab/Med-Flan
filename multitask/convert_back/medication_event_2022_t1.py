@@ -22,37 +22,72 @@ reusing the original gold ids risks collisions once entities are dropped
 must NOT be emitted -- eval_script.py synthesizes it itself from the 5 named
 A-lines it finds, and emitting our own would double it.
 
-Run standalone to self-check against gold on the dev split (no local test
-split exists for CMED) -- should print P=R=F1=1.0 for both tags and
-attributes:
+Run standalone to self-check against gold on the real test split. This is
+not a perfect round-trip: repeated medication mentions within a doc can
+make reanchor() pick a same-text-but-wrong occurrence, so the ceiling here
+is inherently below 1.0 rather than an exact P=R=F1=1.0 like the BRAT-based
+datasets with less mention repetition.
+
+Scored via multitask.brat_scorer (see that module's docstring) rather than
+the official eval_script.py -- that script's tag/attribute matching is a
+single iteration-order-dependent pass ("pare down duplicates then count"),
+not a real assignment algorithm; brat_scorer's greedy nearest-distance
+matcher fixes that. Unlike eval_script.py's single per-trigger "Combined"
+figure (1 TP only if the trigger AND all 5 attributes match exactly),
+brat_scorer reports triggers and attributes as separate pooled axes plus an
+"events.combined" that pools every trigger/role/attribute TP/FP/FN
+together -- a coarser aggregate, not attribute-gated per-event accuracy, so
+it isn't numerically the same quantity as eval_script.py's Combined even
+when both are near 1.0. Current result on the test split (run this file
+standalone to reproduce): triggers F1=0.9792, attributes F1=0.9146,
+events.combined F1=0.9479. (Precision equals recall exactly on each axis --
+an unresolvable prediction now gets a poison span instead of being dropped,
+so on a gold round-trip every miss also costs a wrong guess; see to_ann's
+docstring.)
+
+Run standalone to self-check:
     python -m multitask.convert_back.medication_event_2022_t1
 """
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
+from multitask import brat_scorer
 from multitask.reanchor import reanchor
+from multitask.target_schema import CMED_ATTR_NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
-EVAL_SCRIPT = ROOT / "2022n2c2_track1" / "evaluation_script" / "eval_script.py"
-GOLD_DIR = ROOT / "2022n2c2_track1" / "trainingdata_v3" / "dev"
+GOLD_DIR = ROOT / "2022n2c2_track1" / "test"
 
-ATTR_NAMES = ("Action", "Certainty", "Temporality", "Actor", "Negation")
+ATTR_NAMES = CMED_ATTR_NAMES
 
 
 def to_ann(target, doc_text):
-    """target: the JSON dict (events only). Returns .ann file text."""
+    """target: the JSON dict (events only). Returns .ann file text.
+
+    An event whose trigger_text can't be found anywhere in doc_text used
+    to be dropped entirely (`continue`), which meant a hallucinated
+    medication mention -- and every attribute value predicted for it --
+    cost nothing in scoring: brat_scorer.score_events's fp accounting
+    (`fp=len(valid_sys)-len(trig_matches)` for triggers,
+    `fp=len(attr_values(...))` for an unmatched system event's attributes)
+    only ever sees events that made it into the .ann at all. Giving the
+    trigger a poison span (past doc_text, so it can never overlap a real
+    gold trigger) instead of dropping the event keeps it in the .ann as a
+    real T/E/A-line block -- score_events then counts it as a false
+    positive on every axis automatically, with no changes needed there."""
     used_spans = []
     cursor = 0
     lines = []
     tid = eid = aid = 0
+    poison = len(doc_text) + 1
     for ev in target.get("events", []):
         span = reanchor(ev["trigger_text"], doc_text, used_spans, min_start=cursor)
         if span is None:
-            continue
-        start, end = span
-        cursor = max(cursor, end)
+            start, end = poison, poison + 1
+            poison += 1
+        else:
+            start, end = span
+            cursor = max(cursor, end)
 
         tid += 1
         eid += 1
@@ -79,31 +114,27 @@ def write_anns(predictions, out_dir):
     return out_dir
 
 
-def _run_eval(gold_dir, system_dir):
-    result = subprocess.run(
-        [sys.executable, str(EVAL_SCRIPT), str(gold_dir), str(system_dir)],
-        capture_output=True, text=True,
-    )
-    print(result.stdout)
-    if result.returncode != 0:
-        print(result.stderr, file=sys.stderr)
+def score_dirs(gold_dir, system_dir):
+    """Score system_dir's .ann predictions against gold_dir using the new
+    unified brat_scorer (see module docstring) rather than the official
+    eval_script.py."""
+    brat_scorer.score_dirs(gold_dir, system_dir, brat_scorer.CONFIGS["2022n2c2_track1"])
 
 
 def _self_check():
-    """Round-trip gold dev-split JSON (built by the dataset builder) back to
-    .ann, then score against the real gold -- should be P=R=F1=1.0. Uses
-    dev because CMED has no local test split."""
+    """Round-trip gold test-split JSON (built by the dataset builder) back to
+    .ann, then score against the real gold -- should be P=R=F1=1.0."""
     from multitask.io_utils import read_text
 
     predictions = []
-    for ex in _examples_with_raw_target("dev"):
+    for ex in _examples_with_raw_target("test"):
         doc_text = read_text(GOLD_DIR / f"{ex['id']}.txt")
         predictions.append((ex["id"], ex["target"], doc_text))
 
     with tempfile.TemporaryDirectory() as tmp:
-        write_anns(predictions, tmp)
-        print("=== self-check: gold JSON -> .ann -> eval_script.py ===")
-        _run_eval(GOLD_DIR, tmp)
+        out_dir = write_anns(predictions, tmp)
+        print("=== self-check: gold JSON -> .ann -> brat_scorer ===")
+        score_dirs(GOLD_DIR, out_dir)
 
 
 def _examples_with_raw_target(split):

@@ -10,6 +10,14 @@ __pycache__/
 # Claude Code internal runtime state (not project content)
 .claude/scheduled_tasks.lock
 
+# Scratch/working dirs. .scratch_shac/ is an unzipped copy of the SHAC
+# annotation-guidelines .docx (used to ground the sdoh_event instruction
+# text) -- that document is DUA-gated and its tracked copies under
+# 2022n2c2_track2/Track2_SubtaskA/ are deliberately being removed from
+# version control, so an unignored extraction of it must not be committed
+# either.
+.scratch*/
+
 # --- Dataset raw data (see README.md "Data Sources" to download; see sample_data/ for previews) ---
 
 # 2018_n2c2_track1
@@ -49,10 +57,17 @@ __pycache__/
 2022n2c2_track1/trainingdata_v3/train/
 2022n2c2_track1/trainingdata_v3/dev/
 2022n2c2_track1/archive/
+2022n2c2_track1/test/
 
 # 2022n2c2_track2
-2022n2c2_track2/Track2_SubtaskA/Annotations/
+2022n2c2_track2/Track2_SubtaskA/
 2022n2c2_track2/Track2_SubtaskA.zip
+2022n2c2_track2/train/
+2022n2c2_track2/dev/
+2022n2c2_track2/test/
+2022n2c2_track2/annotation.conf
+2022n2c2_track2/tools.conf
+2022n2c2_track2/visual.conf
 
 # MMLU-Pro-Health
 MMLU-Pro-Health/*.arrow
@@ -93,10 +108,30 @@ semeval_2015/test/
 # umn_abbreviation (UMN Clinical Abbreviation & Acronym Sense Inventory)
 umn_abbreviation/raw/
 
-# 2010_i2b2_va (Concepts, Assertions, and Relations in Clinical Text) --
-# DUA-gated, not yet obtained; folder is empty/absent until placed by hand.
-2010_i2b2_va/train/
-2010_i2b2_va/test/
+# 2010i2b2 (Concepts, Assertions, and Relations in Clinical Text) --
+# DUA-gated. See multitask/builders/i2b2_2010.py's docstring for the
+# expected layout (train from concept_assertion_relation_training_data.tar.gz,
+# test from reference_standard_for_test_data.tar.gz + test_data.tar.gz).
+2010i2b2/
+
+# nli4ct (SemEval-2023 Task 7 NLI4CT)
+nli4ct/raw/
+
+# bionli
+bionli/raw/
+
+# emrqa-msquad
+emrqa-msquad/raw/
+
+# sample_data/semeval_2015
+sample_data/semeval_2015/train/
+sample_data/semeval_2015/test/
 
 CLAUDE.md
 .claude
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.bz2
+*.xz

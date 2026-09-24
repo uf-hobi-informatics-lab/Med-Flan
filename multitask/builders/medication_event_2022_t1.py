@@ -13,16 +13,23 @@ from pathlib import Path
 from multitask.brat import parse_ann
 from multitask.io_utils import read_text
 from multitask.schemas import example
+from multitask.target_schema import CMED_ATTR_NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "2022n2c2_track1/trainingdata_v3"
-SPLIT_DIRS = {"train": BASE / "train", "dev": BASE / "dev"}
-# No official test split present locally for CMED -- flagged in the plan as a gap.
+SPLIT_DIRS = {
+    "train": BASE / "train",
+    "dev": BASE / "dev",
+    "test": ROOT / "2022n2c2_track1" / "test",
+}
 
-ATTR_NAMES = ("Action", "Certainty", "Temporality", "Actor", "Negation")
+ATTR_NAMES = CMED_ATTR_NAMES
 
 
-def build_medication_event(split):
+def _iter_docs(split):
+    """Yields (txt_path, doc_text, doc) for every doc in split -- shared by
+    the full end-to-end builder and the Tier A trigger-only/attr-only
+    subtask builders below (see design.md's Tier A section)."""
     split_dir = SPLIT_DIRS.get(split)
     if split_dir is None or not split_dir.exists():
         return
@@ -30,35 +37,71 @@ def build_medication_event(split):
         ann_path = txt_path.with_suffix(".ann")
         if not ann_path.exists():
             continue
-        doc_text = read_text(txt_path)
-        doc = parse_ann(ann_path)
+        yield txt_path, read_text(txt_path), parse_ann(ann_path)
 
-        # attributes are keyed by their target (an E-line id)
-        attrs_by_target = {}
-        for a in doc.attributes:
-            if a.name in ATTR_NAMES:
-                attrs_by_target.setdefault(a.target, {})[a.name] = a.value
 
-        events = []
-        for eid, ev in doc.events.items():
-            trigger_entity = doc.entities.get(ev.trigger)
-            if trigger_entity is None:
-                continue
-            event_obj = {
-                "id": eid,
-                "type": ev.type,
-                "trigger_text": trigger_entity.text,
-                "attributes": attrs_by_target.get(eid, {}),
-                "_start": trigger_entity.start,
-            }
-            events.append(event_obj)
+def _build_events(doc):
+    """[{"id", "type", "trigger_text", "attributes"}, ...] sorted by trigger
+    offset -- the full end-to-end target, also reused as-is by the
+    attr-only subtask (same attribute-classification skill, just given
+    pre-identified triggers as input instead of having to find them
+    first)."""
+    # attributes are keyed by their target (an E-line id)
+    attrs_by_target = {}
+    for a in doc.attributes:
+        if a.name in ATTR_NAMES:
+            attrs_by_target.setdefault(a.target, {})[a.name] = a.value
 
-        # Sort by trigger's true document offset, not E-id/file order --
-        # same reasoning as ner_re_2018_t2: emitting in reading order is
-        # both what a generative model naturally does and what the
-        # convert_back reanchor step needs to disambiguate repeated
-        # medication mentions (e.g. "Tylenol" named several times).
-        events.sort(key=lambda e: e.pop("_start"))
+    events = []
+    for eid, ev in doc.events.items():
+        trigger_entity = doc.entities.get(ev.trigger)
+        if trigger_entity is None:
+            continue
+        event_obj = {
+            "id": eid,
+            "type": ev.type,
+            "trigger_text": trigger_entity.text,
+            "attributes": attrs_by_target.get(eid, {}),
+            "_start": trigger_entity.start,
+        }
+        events.append(event_obj)
 
-        target = {"events": events}
+    # Sort by trigger's true document offset, not E-id/file order --
+    # same reasoning as ner_re_2018_t2: emitting in reading order is
+    # both what a generative model naturally does and what the
+    # convert_back reanchor step needs to disambiguate repeated
+    # medication mentions (e.g. "Tylenol" named several times).
+    events.sort(key=lambda e: e.pop("_start"))
+    return events
+
+
+def build_medication_event(split):
+    for txt_path, doc_text, doc in _iter_docs(split):
+        target = {"events": _build_events(doc)}
         yield example("medication_event", "2022n2c2_track1", split, txt_path.stem, doc_text, target)
+
+
+def build_medication_event_trigger_only(split):
+    """Tier A subtask: trigger spans + disposition type only, no attribute
+    classification -- see design.md."""
+    for txt_path, doc_text, doc in _iter_docs(split):
+        events = _build_events(doc)
+        triggers = [{"type": e["type"], "text": e["trigger_text"]} for e in events]
+        yield example(
+            "medication_event_trigger_only", "2022n2c2_track1_trigger_only", split, txt_path.stem,
+            doc_text, {"triggers": triggers},
+        )
+
+
+def build_medication_event_attr_only(split):
+    """Tier A subtask: triggers are pre-identified and given in the input
+    (EXTRACTED_TRIGGERS block); the target is the same attribute
+    classification as the full end-to-end task -- see design.md."""
+    for txt_path, doc_text, doc in _iter_docs(split):
+        events = _build_events(doc)
+        trigger_list = "\n".join(f"- {e['type']}: {e['trigger_text']}" for e in events)
+        input_text = f"{doc_text}\n\nEXTRACTED_TRIGGERS:\n{trigger_list}"
+        yield example(
+            "medication_event_attr_only", "2022n2c2_track1_attr_only", split, txt_path.stem,
+            input_text, {"events": events},
+        )

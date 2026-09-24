@@ -12,23 +12,33 @@ from pathlib import Path
 
 from multitask.builders.cohort_eligibility_2018_t1 import build_cohort_eligibility
 from multitask.builders.disorder_normalization_2015_t14 import build_disorder_normalization
+from multitask.builders.emrqa_msquad import build_emrqa_msquad
 from multitask.builders.family_history_2019_t2 import build_family_history
 from multitask.builders.i2b2_2010 import build_concept_assertion_relation
 from multitask.builders.medication_event_2022_t1 import build_medication_event
 from multitask.builders.ner_re_2018_t2 import build_ner_re_medication
 from multitask.builders.sdoh_2022_t2 import build_sdoh_event
 from multitask.builders.simple_tasks import (
-    build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
-    build_mednli, build_mmlu_pro_health, build_pubmedqa, build_umn_abbreviation,
+    build_bionli, build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
+    build_mednli, build_mmlu_pro_health, build_nli4ct, build_pubmedqa, build_umn_abbreviation,
 )
-from multitask.builders.sts_2019_t1 import build_sts
+from multitask.builders.sts_2019_t1 import build_sts, build_sts_classification
+from multitask.split_utils import carve_dev_from_test
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 EVAL_DIR = DATA_DIR / "eval"
 
 # (dataset name used for eval filenames, generator(split)->iterator, splits it has)
+#
+# Tier A subtask-enrichment datasets for ner_re_medication/medication_event
+# (design.md) are intentionally NOT registered here -- they're train-only,
+# additive re-framings meant to be opted in/out of per training run via
+# multitask/huggingface_format/<name>/, not merged unconditionally into this
+# module's single train_unified.jsonl. See build_hf_datasets.py's REGISTRY.
 REGISTRY = [
     ("MedNLI", build_mednli, ["train", "dev", "test"]),
+    ("bionli", build_bionli, ["train", "dev", "test"]),
+    ("nli4ct", build_nli4ct, ["train", "dev", "test"]),
     ("MedQA-USMLE-US", lambda s: build_medqa("MedQA-USMLE-US", s), ["train", "dev", "test"]),
     ("MedQA-USMLE-Mainland", lambda s: build_medqa("MedQA-USMLE-Mainland", s), ["train", "dev", "test"]),
     ("MedQA-USMLE-Taiwan", lambda s: build_medqa("MedQA-USMLE-Taiwan", s), ["train", "dev", "test"]),
@@ -37,8 +47,8 @@ REGISTRY = [
     # public test set never shipped gold labels) -- unlike every other
     # dataset here, "test" is unusable for scoring at all, so it's left out
     # of the splits list entirely and dev stands in as this dataset's final
-    # eval split (same fallback pattern as CMED/SHAC below, different root
-    # cause: those two have no test split, this one has an ungraded one).
+    # eval split (the only dataset in this REGISTRY that needs this
+    # fallback -- every other dataset has a genuine, scoreable test split).
     ("medmcqa", build_medmcqa, ["train", "dev"]),
     ("pubmedqa", build_pubmedqa, ["train", "dev", "test"]),
     ("covid (LitCovid)", build_litcovid, ["train", "dev", "test"]),
@@ -46,17 +56,17 @@ REGISTRY = [
     ("2018_n2c2_track1", build_cohort_eligibility, ["train", "test"]),
     ("2018_n2c2_track2", build_ner_re_medication, ["train", "test"]),
     ("2019_n2c2_track1", build_sts, ["train", "test"]),
+    ("2019_n2c2_track1_cls", build_sts_classification, ["train", "test"]),
     ("2019_n2c2_track2", build_family_history, ["train", "test"]),
-    # No test split exists locally for these two -- "dev" stands in as the
-    # held-out eval split; flagged as a gap in the plan (CMED/SHAC have no
-    # released test set in this repo).
-    ("2022n2c2_track1", build_medication_event, ["train", "dev"]),
-    ("2022n2c2_track2", build_sdoh_event, ["train", "dev"]),
+    ("2022n2c2_track1", build_medication_event, ["train", "dev", "test"]),
+    ("2022n2c2_track2_mimic", lambda s: build_sdoh_event("mimic", s), ["train", "dev", "test"]),
+    ("2022n2c2_track2_uw", lambda s: build_sdoh_event("uw", s), ["train", "dev", "test"]),
     ("semeval_2015", build_disorder_normalization, ["train", "test"]),
     ("umn_abbreviation", build_umn_abbreviation, ["train", "dev", "test"]),
-    # No data locally yet -- DUA-gated, folder absent; yields 0 examples
-    # safely until 2010_i2b2_va/ is populated (builder's rglob finds nothing).
     ("2010_i2b2_va", build_concept_assertion_relation, ["train", "test"]),
+    # HF ships train/validation only, no test -- dev stands in as the final
+    # eval split, same fallback as medmcqa above.
+    ("emrqa-msquad", build_emrqa_msquad, ["train", "dev"]),
 ]
 
 
@@ -83,8 +93,8 @@ def main(seed: int = 13):
             print(f"[train] {name}: {len(train_examples) - n_before} examples")
 
         # The final per-task metric always comes from a genuine held-out test
-        # split when one exists; only fall back to dev (CMED, SHAC) when this
-        # dataset has no test split released locally at all.
+        # split when one exists; only fall back to dev (medmcqa) when this
+        # dataset has no scoreable test split released locally at all.
         eval_split = "test" if "test" in splits else ("dev" if "dev" in splits else None)
 
         # A dataset's dev split feeds the MERGED validation set only when it's
@@ -103,6 +113,14 @@ def main(seed: int = 13):
         _write_jsonl(eval_path, eval_examples)
         eval_counts[name] = (eval_split, len(eval_examples))
         print(f"[eval]  {name} ({eval_split}): {len(eval_examples)} examples -> {eval_path.relative_to(DATA_DIR.parent)}")
+
+        # No released dev split -- carve a monitoring-only dev sample out of
+        # test instead. This overlaps test (test itself is left intact above,
+        # so per-task scoring still runs against the full, official test set).
+        if "dev" not in splits and eval_split == "test":
+            carved = carve_dev_from_test(eval_examples)
+            dev_examples.extend(carved)
+            print(f"[dev]   {name}: {len(carved)} examples carved from test (merged validation only, overlaps test)")
 
     rng = random.Random(seed)
     rng.shuffle(train_examples)

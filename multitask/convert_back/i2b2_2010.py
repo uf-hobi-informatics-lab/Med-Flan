@@ -15,7 +15,11 @@ multitask.reanchor.reanchor() (the same left-to-right greedy matching every
 BRAT-family convert_back module uses) to recover a comparable span, since a
 generative model can only be expected to reproduce the text it saw, not the
 exact line:token offsets. Gold spans are NOT reanchored -- the builder
-already derives them exactly from the released .con/.ast/.rel offsets.
+already derives them exactly from the released .con/.ast/.rel offsets (and,
+critically, from doc_text itself rather than the .con file's own text
+field, which the i2b2 2010 format always lowercases regardless of the
+source document's real casing -- confirmed empirically: 0/31159 concept
+text fields in the released test .con files contain an uppercase letter).
 
 Scoring, standard i2b2-2010 methodology:
   - concepts: exact-match P/R/F1 on (span, type).
@@ -26,11 +30,21 @@ Scoring, standard i2b2-2010 methodology:
     endpoints' gold identity -- a predicted relation only counts if both
     endpoints reanchored onto a correctly-matched gold concept.
 
-No real data has been obtained yet (DUA-gated) -- self-check degrades to a
-no-op until 2010_i2b2_va/ is populated; see _self_check() below.
+Known limitation (same ceiling-below-1.0 situation as ner_re_2018_t2.py):
+gold-as-prediction self-check on the real test split measures concept
+F1=0.9996 (2 relation/assertion axes hit exact 1.0), not 1.0 on the nose --
+13 of ~2,600 test concepts are short, frequently-repeated tokens (single
+vital-sign letters "T"/"P"/"A", bare words like "rate"/"fever") where
+reanchor()'s left-to-right greedy cursor picks a different same-text
+occurrence than the specific one gold points to. This is not a converter
+bug: a real generative model's plain-text output has the exact same
+ambiguity (it can only say "T", never "the 3rd T"), so this ceiling is
+inherent to text-only reconstruction, not specific to the self-check.
 
-Run standalone to self-check against gold on the test split (once data
-exists -- should give concept/relation P=R=F1=1.0 and assertion accuracy=1.0):
+Run standalone to self-check against gold on the test split (concept F1
+should be >=0.999, assertion accuracy and relation F1 should be exactly
+1.0 -- see "Known limitation" above for why concept isn't asserted at
+exactly 1.0):
     python -m multitask.convert_back.i2b2_2010
 """
 from pathlib import Path
@@ -50,17 +64,33 @@ def _prf(tp, n_gold, n_pred):
 def _resolve_predicted_concepts(concepts, doc_text):
     """concepts: predicted target's "concepts" list (no offsets -- only
     text). Returns {id: (start, end, type, assertion)}, resolved
-    left-to-right via reanchor()."""
+    left-to-right via reanchor().
+
+    A concept whose text can't be found anywhere in doc_text is NOT
+    dropped -- it is assigned a poison span (past the end of doc_text,
+    monotonically increasing so no two poison spans collide) that can
+    never equal a real gold span. It still lands in the returned dict, so
+    it is still counted in len(pred_by_id) (the concept-precision
+    denominator in _score_doc), but it can only ever contribute a false
+    positive, never a false true-positive. Previously `continue`d here,
+    which meant a hallucinated concept (one whose text isn't in the
+    document at all) cost nothing in the precision denominator -- the
+    strictly optimal strategy under that scoring was to hallucinate freely."""
     used_spans, cursor = [], 0
     resolved = {}
-    for c in concepts if isinstance(concepts, list) else []:
+    poison = len(doc_text) + 1
+    for i, c in enumerate(concepts if isinstance(concepts, list) else []):
         if not isinstance(c, dict):
             continue
         span = reanchor(c.get("text") or "", doc_text, used_spans, min_start=cursor)
         if span is None:
-            continue
-        cursor = span[1]
-        resolved[c.get("id")] = (span[0], span[1], c.get("type"), c.get("assertion"))
+            start, end = poison, poison + 1
+            poison += 1
+        else:
+            start, end = span
+            cursor = end
+        cid = c.get("id")
+        resolved[cid if cid is not None else f"_no_id_{i}"] = (start, end, c.get("type"), c.get("assertion"))
     return resolved
 
 
@@ -102,10 +132,18 @@ def _score_doc(gold, doc_text, pred):
     for r in pred.get("relations", []) if isinstance(pred, dict) else []:
         if not isinstance(r, dict):
             continue
-        gid1 = matched_pred_to_gold.get(r.get("arg1"))
-        gid2 = matched_pred_to_gold.get(r.get("arg2"))
-        if gid1 is not None and gid2 is not None:
-            pred_rel_keys.append((r.get("type"), gid1, gid2))
+        # Sentinel for an endpoint that didn't resolve to a correctly-
+        # matched gold concept. "__unmatched__" can never equal a real
+        # gold id (those are always "c{i}"), so a relation with either
+        # endpoint unresolved always fails the `in gold_rel_remaining`
+        # check below -- it still counts in len(pred_rel_keys) (the
+        # relation-precision denominator), it just can never become a
+        # false true-positive. Previously such relations were dropped
+        # entirely rather than counted as an attempted (and wrong)
+        # prediction -- same "hallucination is free" gap as concepts.
+        gid1 = matched_pred_to_gold.get(r.get("arg1"), "__unmatched__")
+        gid2 = matched_pred_to_gold.get(r.get("arg2"), "__unmatched__")
+        pred_rel_keys.append((r.get("type"), gid1, gid2))
 
     gold_rel_remaining = list(gold_rel_keys)
     rel_tp = 0
@@ -146,7 +184,7 @@ def score(gold_docs, predictions):
 
 def score_dataset(predictions, split="test"):
     """predictions: {doc_id: parsed target dict}. Reloads gold for `split`
-    directly from 2010_i2b2_va/, independent of the builder's rendered eval
+    directly from 2010i2b2/, independent of the builder's rendered eval
     jsonl (mirrors disorder_normalization_2015_t14.score_dataset)."""
     from multitask.builders.i2b2_2010 import _iter_records
 
@@ -174,11 +212,15 @@ def _examples_with_raw_target(split):
 def _self_check():
     predictions = {ex["id"]: ex["target"] for ex in _examples_with_raw_target("test")}
     if not predictions:
-        print("i2b2_2010: no data found under 2010_i2b2_va/test/ -- nothing to self-check yet (DUA-gated, not yet obtained).")
+        print("i2b2_2010: no data found under 2010i2b2/ -- nothing to self-check (see .gitignore's 2010i2b2/ entry).")
         return
     result = score_dataset(predictions, split="test")
     print(result)
-    assert result["concept"]["f1"] == 1.0, result
+    # concept isn't asserted at exactly 1.0 -- see module docstring's "Known
+    # limitation" (13/~2600 test concepts are short, repeated tokens that
+    # reanchor()'s greedy cursor can't disambiguate from gold-as-prediction
+    # alone; a real model's plain-text output has the identical ambiguity).
+    assert result["concept"]["f1"] >= 0.999, result
     assert result["assertion_accuracy"] == 1.0, result
     assert result["relation"]["f1"] == 1.0, result
     print("OK")
