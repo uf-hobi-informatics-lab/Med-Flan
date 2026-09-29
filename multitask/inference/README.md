@@ -47,7 +47,7 @@ Single dataset, from the command line:
 ```bash
 python -m multitask.inference.vllm_structured_infer 2022n2c2_track2_uw \
     --model Qwen/Qwen2.5-7B-Instruct --backend xgrammar --limit 50 \
-    --temperature 0 --enable-thinking false \
+    --temperature 0 --enable-thinking false --disable-any-whitespace \
     --sampling-kwarg repetition_penalty=1.1 --sampling-kwarg seed=0 \
     --out completions.json
 
@@ -61,13 +61,54 @@ module docstring for why). `--enable-thinking {auto,true,false}` toggles the
 Qwen3-style chat-template reasoning switch; needs a vLLM build whose
 `LLM.chat()` accepts `chat_template_kwargs` (confirmed present in 0.19.0,
 absent in 0.6.6.post1) — silently ignored with a printed note otherwise.
-All of these are also `run()` keyword arguments for the Python API.
+`--disable-any-whitespace` compiles the JSON grammar with `any_whitespace=False`
+so the model can't loop on whitespace until `max_tokens` without ever opening
+`{` (legal under the grammar, since inter-token whitespace is valid JSON, but
+useless as output) — engine-level config, needs a vLLM build whose
+`structured_outputs_config` honors the key + the xgrammar/guidance backend;
+silently dropped with a printed note on an older vLLM. All of these are also
+`run()` (and `_make_llm()`) keyword arguments for the Python API.
 
 Swap `2022n2c2_track2_uw` for any dataset name under `multitask/data/eval/`
 (drop the `.jsonl`).
 
 Every task at once: open `run_inference_eval.ipynb`, set `MODEL`/`BACKEND`/
 `LIMIT` in its Config cell, and run top to bottom.
+
+## Paragraph-window inference + eval (2018_n2c2_track2_paragraph)
+
+A model trained only on `ner_re_medication_paragraph`
+(`2018_n2c2_track2_paragraph` — see `design.md`'s paragraph-chunking
+section) needs its own inference + eval path: this dataset has no
+`multitask/data/eval/*.jsonl` file (paragraph datasets are HF-only and
+additive, never merged into `build_unified_dataset.py`), and its
+completions are keyed one-per-paragraph (`f"{doc_stem}__p{i}"`), not
+one-per-document — `multitask.eval.run_eval` assumes the latter and can't
+score these directly.
+
+```python
+from datasets import load_from_disk
+from multitask.inference.vllm_structured_infer import run
+from multitask.eval.paragraph_eval import run_paragraph_eval
+
+test_split = load_from_disk(
+    "multitask/huggingface_format/2018_n2c2_track2_paragraph"
+)["test"]
+completions = run(test_split, model="Qwen/Qwen2.5-7B-Instruct", backend="xgrammar")
+run_paragraph_eval(completions)  # merges paragraphs back to whole-note .ann, then scores
+```
+
+`run()`'s `dataset` argument accepts an already-loaded `datasets.Dataset`
+directly (not just a `multitask/data/eval/` jsonl path), so pass the
+loaded HF split rather than a bare dataset name. `run_paragraph_eval`
+(`multitask/eval/paragraph_eval.py`) merges every document's paragraph
+completions back into one whole-note `.ann` — offset-shifted from
+paragraph-local to document-global coordinates, ids renumbered — and
+scores it against the *same* whole-note gold and `brat_scorer` the
+doc-level `ner_re_medication` task uses, so the two are directly
+comparable. See that module's docstring for why this needs a separate
+pipeline and `multitask/convert_back/ner_re_2018_t2.py`'s
+`write_anns_from_paragraphs`/`_merge_paragraph_anns` for the merge itself.
 
 ## Caveats
 

@@ -29,7 +29,8 @@ from multitask.builders.i2b2_2010 import (
     build_concept_assertion_relation_re_only, build_concept_assertion_relation_section,
 )
 from multitask.builders.medication_event_2022_t1 import (
-    build_medication_event, build_medication_event_attr_only, build_medication_event_trigger_only,
+    build_medication_event, build_medication_event_attr_only, build_medication_event_paragraph,
+    build_medication_event_trigger_only,
 )
 from multitask.builders.ner_re_2018_t2 import (
     build_ner_re_medication, build_ner_re_medication_ner_only, build_ner_re_medication_paragraph,
@@ -37,7 +38,7 @@ from multitask.builders.ner_re_2018_t2 import (
 )
 from multitask.builders.sdoh_2022_t2 import build_sdoh_event
 from multitask.builders.simple_tasks import (
-    build_bionli, build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
+    build_biosses, build_bionli, build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
     build_mednli, build_mmlu_pro_health, build_nli4ct, build_pubmedqa, build_umn_abbreviation,
 )
 from multitask.builders.sts_2019_t1 import build_sts, build_sts_classification
@@ -55,6 +56,10 @@ REGISTRY = [
     ("MedQA-USMLE-Mainland", lambda s: build_medqa("MedQA-USMLE-Mainland", s), ["train", "dev", "test"]),
     ("MedQA-USMLE-Taiwan", lambda s: build_medqa("MedQA-USMLE-Taiwan", s), ["train", "dev", "test"]),
     ("MMLU-Pro-Health", build_mmlu_pro_health, ["test"]),  # upstream ships only one split
+    # OOD-only check (not clinical-note domain) -- see build_unified_dataset.py's
+    # REGISTRY comment and multitask.builders.simple_tasks.build_biosses.
+    # Test-only, upstream ships only one split.
+    ("biosses", build_biosses, ["test"]),
     # medmcqa's public test.json ships no `cop` (gold answer) -> every test
     # target would be {"answer": null} (unscoreable, toxic to train on), so
     # drop it and let dev stand in as the eval split (same as build_unified_dataset.py).
@@ -88,6 +93,14 @@ REGISTRY = [
     # train-only/HF-only convention as the two above.
     ("2022n2c2_track1_trigger_only", build_medication_event_trigger_only, ["train"]),
     ("2022n2c2_track1_attr_only", build_medication_event_attr_only, ["train"]),
+    # Paragraph-window dataset for medication_event (design.md's paragraph-
+    # chunking section) -- HF-only, additive, same mechanism/convention as
+    # 2018_n2c2_track2_paragraph above (new text spans, not relabeled ones).
+    # track1 ships a real dev split, so all three are built (unlike track2's
+    # paragraph, which auto-carves dev from test). Never wired into
+    # build_unified_dataset.py/run_eval.py -- doc-level scoring stays
+    # authoritative (see design.md).
+    ("2022n2c2_track1_paragraph", build_medication_event_paragraph, ["train", "dev", "test"]),
     ("2022n2c2_track2_mimic", lambda s: build_sdoh_event("mimic", s), ["train", "dev", "test"]),
     ("2022n2c2_track2_uw", lambda s: build_sdoh_event("uw", s), ["train", "dev", "test"]),
     ("semeval_2015", build_disorder_normalization, ["train", "test"]),
@@ -109,10 +122,10 @@ REGISTRY = [
 ]
 
 
-def _build_split(gen, split):
+def _build_split(gen, split, messages_key="messages"):
     rows = [
         {
-            "messages": ex["messages"],
+            "messages": ex[messages_key],
             "task": ex["task"],
             "category": ex["category"],
             "dataset": ex["dataset"],
@@ -123,29 +136,34 @@ def _build_split(gen, split):
     return Dataset.from_list(rows) if rows else None
 
 
+def _build_and_save(name, gen, splits, messages_key):
+    split_datasets = {}
+    for split in splits:
+        ds = _build_split(gen, split, messages_key)
+        if ds is not None and len(ds) > 0:
+            split_datasets[split] = ds
+    # No released dev split -- carve a monitoring-only dev sample out of
+    # test instead (overlaps test; test itself is left unchanged so
+    # per-task scoring still runs against the full, official test set).
+    if "dev" not in splits and "train" in split_datasets and "test" in split_datasets:
+        dev_rows = carve_dev_from_test(split_datasets["test"].to_list())
+        if dev_rows:
+            split_datasets["dev"] = Dataset.from_list(dev_rows)
+    if not split_datasets:
+        print(f"[skip] {name}: no data found", file=sys.stderr)
+        return
+    dd = DatasetDict(split_datasets)
+    out_path = OUT_DIR / name
+    dd.save_to_disk(str(out_path))
+    summary = ", ".join(f"{split}={len(ds)}" for split, ds in split_datasets.items())
+    print(f"[saved] {name}: {summary} -> {out_path.relative_to(OUT_DIR.parent.parent)}")
+
+
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for name, gen, splits in REGISTRY:
-        split_datasets = {}
-        for split in splits:
-            ds = _build_split(gen, split)
-            if ds is not None and len(ds) > 0:
-                split_datasets[split] = ds
-        # No released dev split -- carve a monitoring-only dev sample out of
-        # test instead (overlaps test; test itself is left unchanged so
-        # per-task scoring still runs against the full, official test set).
-        if "dev" not in splits and "train" in split_datasets and "test" in split_datasets:
-            dev_rows = carve_dev_from_test(split_datasets["test"].to_list())
-            if dev_rows:
-                split_datasets["dev"] = Dataset.from_list(dev_rows)
-        if not split_datasets:
-            print(f"[skip] {name}: no data found", file=sys.stderr)
-            continue
-        dd = DatasetDict(split_datasets)
-        out_path = OUT_DIR / name
-        dd.save_to_disk(str(out_path))
-        summary = ", ".join(f"{split}={len(ds)}" for split, ds in split_datasets.items())
-        print(f"[saved] {name}: {summary} -> {out_path.relative_to(OUT_DIR.parent.parent)}")
+        _build_and_save(name, gen, splits, "messages")
+        _build_and_save(f"{name}_md", gen, splits, "messages_md")
 
 
 if __name__ == "__main__":

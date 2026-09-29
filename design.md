@@ -776,3 +776,53 @@ here).
 - How the joint-mixture sampling weights should be re-tuned once these
   datasets have 3x (or more) as many examples as today, so they don't
   crowd out the other simple-task datasets disproportionately.
+
+## Owner decision: Tier A as a 2-stage SFT curriculum, not additive-only
+
+The "Where this plugs in" section above recommended Tier A subtask
+examples as additive rows *within a single training pass* specifically to
+avoid a train/inference mismatch (RE-only/attr-only train on gold entities,
+never scored standalone) and because `run_eval.py` only ever scores the
+full end-to-end task. **Owner decision: build a genuine 2-stage SFT
+curriculum instead** -- Stage 1 trains on the decomposed sub-skills (plus
+the other easy/foundational tasks) so the model learns NER, RE, trigger
+detection, and attribute classification as isolated skills first; Stage 2
+adds the full end-to-end `ner_re_medication`/`medication_event` tasks
+(everything combined). The train/inference mismatch risk for RE-only/
+attr-only is accepted here: Stage 1 is a warm-up/skill-acquisition phase,
+not a literal chained inference pipeline, and the full end-to-end task
+(never assuming pre-extracted entities) is still the only thing trained on
+in Stage 2 and the only thing ever scored.
+
+Stage composition (`multitask/build_sft_curriculum.py`):
+- **Stage 1 (easy + sub-skills):** the original easy-task TIER1 (`MedNLI`,
+  `MedQA-USMLE-US`, `umn_abbreviation`, `2018_n2c2_track1`/cohort_eligibility,
+  `2019_n2c2_track1_cls`/sts_classification) plus the four Tier A subtask
+  datasets -- `2018_n2c2_track2_ner_only`/`_re_only`
+  (`ner_re_medication_ner_only`/`_re_only`) and
+  `2022n2c2_track1_trigger_only`/`_attr_only`
+  (`medication_event_trigger_only`/`_attr_only`). All `_md` (markdown)
+  rendered, matching the rest of this curriculum family.
+- **Stage 2 (combined, end-to-end):** Stage 1's datasets again (anti-
+  forgetting replay, same convention as the existing RL curriculum's
+  stage2_full) plus the full end-to-end `2018_n2c2_track2`
+  (`ner_re_medication`), `2018_n2c2_track2_paragraph`
+  (`ner_re_medication_paragraph`), `2022n2c2_track1` (`medication_event`),
+  `2022n2c2_track2_mimic`/`_uw` (`sdoh_event`, no decomposition available),
+  and `2019_n2c2_track2` (`family_history`, no decomposition available --
+  "never evaluated either way" above still holds; it just rides along in
+  Stage 2 same as before).
+- The four Tier A datasets are train-only with no `dev` split (confirmed on
+  disk: `{"train": 303}` etc.) -- `build()` must tolerate a missing `dev`
+  split per-dataset rather than assuming every name has one.
+
+**This changes what "the ablation" (still not done, see above) needs to
+compare.** It's no longer just "with vs. without Tier A" -- there are now
+two candidate treatments to weigh against the no-Tier-A baseline: (a)
+Tier A as additive single-pass rows (this section's original
+recommendation, matching the FLAN/T0/T5 examples-proportional-mixing
+convention -- no staging), and (b) this 2-stage curriculum. Both are now
+buildable; deciding between them still requires the same held-out
+full-task F1 comparison this section always called for, just with one more
+arm.
+

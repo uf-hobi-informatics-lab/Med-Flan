@@ -115,6 +115,16 @@ class Str:
 
 
 @dataclass(frozen=True)
+class Num:
+    """A JSON number (float/int), e.g. sts_regression similarity 0-5. The
+    grammar emits `{"type": "number"}` so output is a JSON number, not a
+    string -- numeric value ranges are NOT enforced by grammar-based decoders
+    (xgrammar can mask tokens to a number but not to a numeric range), so any
+    clamping is done downstream (see convert_back/sts_2019_t1.py)."""
+    nullable: bool = False
+
+
+@dataclass(frozen=True)
 class Enum:
     """Closed vocabulary. `nullable` allows JSON null (e.g. i2b2 assertion
     is null for non-problem concepts)."""
@@ -286,10 +296,60 @@ SPECS = {
     "medication_event_trigger_only": Obj(
         keys={"triggers": Arr(_TYPED_SPAN_OF["cmed"])}, required=("triggers",)),
     "medication_event_attr_only": Obj(keys={"events": Arr(_CMED_EVENT)}, required=("events",)),
+    "medication_event_paragraph": Obj(keys={"events": Arr(_CMED_EVENT)}, required=("events",)),
     "concept_assertion_relation_ner_only": Obj(
         keys={"concepts": Arr(_TYPED_SPAN_OF["i2b2"])}, required=("concepts",)),
     "concept_assertion_relation_re_only": _I2B2_FULL,
     "concept_assertion_relation_section": _I2B2_FULL,
+
+    # --- classification / question_answering / similarity_regression tasks
+    # These produce a small JSON target; speccing them attaches a decoding
+    # grammar that forces output to start with the JSON object's opening
+    # brace (no room for Qwen3 imd blocks or prose preamble) and to the
+    # eval-expected key/shape. Shapes + vocab verified against the built
+    # eval gold in multitask/data/eval/*.jsonl and the eval scorers.
+    "cohort_eligibility": Obj(
+        keys={"label": Enum(("not met", "met"))}, required=("label",)),
+    "nli": Obj(
+        keys={"label": Enum(("entailment", "contradiction", "neutral"))},
+        required=("label",)),
+    "sts_classification": Obj(
+        keys={"category": Enum((
+            "dissimilar", "weakly_related", "partially_equivalent",
+            "mostly_equivalent", "highly_equivalent"))},
+        required=("category",)),
+    "similarity_classification": Obj(
+        keys={"category": Enum((
+            "very_weak", "weak", "moderate", "strong", "very_strong"))},
+        required=("category",)),
+    "qa_yesnomaybe": Obj(
+        keys={"decision": Enum(("yes", "no", "maybe")), "long_answer": Str()},
+        required=("decision", "long_answer")),
+    "mcqa": Obj(
+        # A-J superset: MMLU-Pro-Health offers up to 10 options (gold answers
+        # reach F-J); a narrower enum would block valid answers.
+        keys={"answer": Enum(tuple("ABCDEFGHIJ"))}, required=("answer",)),
+    "mcqa_explain": Obj(
+        # medmcqa is the only mcqa_explain dataset and offers A-D, so the
+        # enum is tightened to match -- A-J would let the model pick an option
+        # letter that doesn't exist for a 4-option question (always wrong).
+        keys={"answer": Enum(tuple("ABCD")), "explanation": Str()},
+        required=("answer", "explanation")),
+    "multilabel_cls": Obj(
+        keys={"labels": Arr(Enum((
+            "Treatment", "Diagnosis", "Mechanism", "Prevention",
+            "Transmission", "Case Report", "Epidemic Forecasting")))},
+        required=("labels",)),
+    "abbreviation_disambiguation": Obj(
+        # Sense inventory is per-example, so the value is unconstrained --
+        # the spec still forces {"expansion": "..."} JSON.
+        keys={"expansion": Str()}, required=("expansion",)),
+    "qa_span_extraction": Obj(
+        # Verbatim context substring, so the value is unconstrained --
+        # the spec still forces {"answer": "..."} JSON.
+        keys={"answer": Str()}, required=("answer",)),
+    "sts_regression": Obj(
+        keys={"similarity": Num()}, required=("similarity",)),
 }
 
 
@@ -396,6 +456,15 @@ def _validate(spec, value, path, out):
                 out.append(f"{path}: null not allowed")
         elif value not in spec.values:
             out.append(f"{path}: {value!r} not in vocabulary")
+        return
+    if isinstance(spec, Num):
+        if value is None:
+            if not spec.nullable:
+                out.append(f"{path}: null not allowed")
+        elif isinstance(value, bool):  # bool is an int subclass -- reject it
+            out.append(f"{path}: expected number, got bool")
+        elif not isinstance(value, (int, float)):
+            out.append(f"{path}: expected number, got {type(value).__name__}")
         return
     if isinstance(spec, Str):
         if value is None:
@@ -573,4 +642,6 @@ def _to_json_schema(spec):
     if isinstance(spec, Enum):
         values = list(spec.values) + ([None] if spec.nullable else [])
         return {"enum": values}
+    if isinstance(spec, Num):
+        return {"type": ["number", "null"] if spec.nullable else "number"}
     return {"type": ["string", "null"] if spec.nullable else "string"}

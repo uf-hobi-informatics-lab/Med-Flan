@@ -95,24 +95,37 @@ TASKS = {
         "category": "classification",
         "display": "NLI",
         "instruction": (
-            'Determine the relationship between the premise and hypothesis: '
-            'entailment, contradiction, or neutral. Return JSON {"label": ...}.'
+            "### Task\n"
+            "Determine the relationship between the premise and "
+            "hypothesis.\n\n"
+            "### Labels\n"
+            "- **entailment**\n"
+            "- **contradiction**\n"
+            "- **neutral**\n\n"
+            "### Output Format\n"
+            'Return JSON `{"label": ...}`.'
         ),
     },
     "mcqa": {
         "category": "question_answering",
         "display": "MCQA",
         "instruction": (
-            'Answer the multiple-choice question by selecting the correct option '
-            'letter. Return JSON {"answer": <letter>}.'
+            "### Task\n"
+            "Answer the multiple-choice question by selecting the correct "
+            "option letter.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"answer": <letter>}`.'
         ),
     },
     "mcqa_explain": {
         "category": "question_answering",
         "display": "MCQA_Explain",
         "instruction": (
-            'Answer the multiple-choice question and explain your reasoning. '
-            'Return JSON {"answer": <letter>, "explanation": ...}.'
+            "### Task\n"
+            "Answer the multiple-choice question and explain your "
+            "reasoning.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"answer": <letter>, "explanation": ...}`.'
         ),
     },
     # Hybrid: the "decision" field is a closed yes/no/maybe label
@@ -124,26 +137,33 @@ TASKS = {
         "category": "question_answering",
         "display": "QA_YesNoMaybe",
         "instruction": (
-            'Answer the research question yes, no, or maybe given the context, '
-            'and give a long-form answer. Return JSON '
-            '{"decision": ..., "long_answer": ...}.'
+            "### Task\n"
+            "Answer the research question yes, no, or maybe given the "
+            "context, and give a long-form answer.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"decision": ..., "long_answer": ...}`.'
         ),
     },
     "multilabel_cls": {
         "category": "classification",
         "display": "Multilabel_Topic",
         "instruction": (
-            'Assign all applicable topic labels to this article. '
-            'Return JSON {"labels": [...]}.'
+            "### Task\n"
+            "Assign all applicable topic labels to this article.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"labels": [...]}`.'
         ),
     },
     "summarization": {
         "category": "summarization",
         "display": "Summarization",
         "instruction": (
-            'Write the discharge instructions and brief hospital course for '
-            'this patient. Return plain text, not JSON, in exactly this '
-            'format (the scorer splits on these literal headers): '
+            "### Task\n"
+            "Write the discharge instructions and brief hospital course "
+            "for this patient.\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in exactly this format (the "
+            "scorer splits on these literal headers): "
             '"DISCHARGE INSTRUCTIONS:\\n<text>\\n\\nBRIEF HOSPITAL COURSE:'
             '\\n<text>".'
         ),
@@ -152,151 +172,222 @@ TASKS = {
         "category": "similarity_regression",
         "display": "STS_Regression",
         "instruction": (
-            'Rate the semantic similarity of the two clinical sentences on a '
-            '0-5 scale (0 = unrelated, 5 = semantically equivalent), to two '
-            'decimal places. Return JSON {"similarity": <float, e.g. 3.50>}.'
+            "### Task\n"
+            "Rate the semantic similarity of the two clinical sentences "
+            "on a 0-5 scale (0 = unrelated, 5 = semantically equivalent), "
+            "to two decimal places.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"similarity": <float, e.g. 3.50>}`.'
         ),
     },
     "sts_classification": {
         "category": "classification",
         "display": "STS_Classification",
         "instruction": (
-            'Classify the semantic similarity of the two clinical sentences '
-            'into one of 5 categories: "dissimilar" (unrelated, or share no '
-            'clinically meaningful information), "weakly_related" (same '
-            'general topic but very different clinical content), '
-            '"partially_equivalent" (share important clinical information '
-            'but differ in other important details), "mostly_equivalent" '
-            '(same essential clinical meaning, only minor/unimportant '
-            'details differ), or "highly_equivalent" (semantically '
-            'equivalent or nearly so). Return JSON {"category": <one of the '
-            '5 values above, as a string>}.'
+            "### Task\n"
+            "Classify the semantic similarity of the two clinical "
+            "sentences into one of 5 categories.\n\n"
+            "### Categories\n"
+            "- **dissimilar**: unrelated, or share no clinically "
+            "meaningful information\n"
+            "- **weakly_related**: same general topic but very different "
+            "clinical content\n"
+            "- **partially_equivalent**: share important clinical "
+            "information but differ in other important details\n"
+            "- **mostly_equivalent**: same essential clinical meaning, "
+            "only minor/unimportant details differ\n"
+            "- **highly_equivalent**: semantically equivalent or nearly "
+            "so\n\n"
+            "### Output Format\n"
+            'Return JSON `{"category": <one of the 5 values above, as a '
+            'string>}`.'
+        ),
+    },
+    "similarity_classification": {
+        "category": "classification",
+        "display": "Similarity_Classification",
+        "instruction": (
+            "### Task\n"
+            "Classify the semantic similarity of the two "
+            "biomedical-literature sentences into one of 5 "
+            "categories.\n\n"
+            "### Categories\n"
+            "- **very_weak**: unrelated, or share no meaningful "
+            "information\n"
+            "- **weak**: same general topic but very different content\n"
+            "- **moderate**: share some information but differ in other "
+            "important details\n"
+            "- **strong**: mostly the same meaning, only minor details "
+            "differ\n"
+            "- **very_strong**: semantically equivalent or nearly so\n\n"
+            "### Output Format\n"
+            'Return JSON `{"category": <one of the 5 values above, as a '
+            'string>}`.'
         ),
     },
     "cohort_eligibility": {
         "category": "classification",
         "display": "Cohort_Eligibility",
         "instruction": (
-            'Given the patient\'s longitudinal clinical notes and ONE named '
-            'clinical trial eligibility criterion (with its definition), decide '
-            'whether the patient meets that single criterion. '
-            'Return JSON {"label": "met"} or {"label": "not met"}.'
+            "### Task\n"
+            "Given the patient's longitudinal clinical notes and ONE "
+            "named clinical trial eligibility criterion (with its "
+            "definition), decide whether the patient meets that single "
+            "criterion.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"label": "met"}` or `{"label": "not met"}`.'
         ),
     },
     "ner_re_medication": {
         "category": "information_extraction",
         "display": "NER_RE",
         "instruction": (
-            'Task: Extract every Drug mention in this note and its linked '
-            'clinical attributes, per the 2018 n2c2 Track 2 ADE/medication-'
-            'extraction schema (Henry et al. 2020, JAMIA).\n'
-            'Definitions: Drug = a medication name (generic, brand, or drug '
-            'class). Strength = amount of active ingredient per dose unit '
-            '(e.g. "40 mg"). Form = the drug\'s physical form (e.g. tablet, '
-            'patch, cream). Dosage = amount given per administration (e.g. '
-            '"2 tablets"). Frequency = how often it\'s taken (e.g. "twice '
-            'daily"). Route = how it enters the body (e.g. "PO", "IV", '
-            '"topically"). Duration = how long it is/was taken. Reason = the '
-            'medical indication for the drug. ADE = an adverse reaction '
-            'attributed to the drug. Each attribute links to the Drug '
-            'mention(s) it describes -- any attribute type may link to more '
-            'than one Drug, most often Reason/ADE (e.g. one shared side '
-            'effect attributed to two co-administered drugs).\n'
-            'OutputFormat: Nest each attribute mention under its linked '
-            'Drug, keyed by attribute type -- omit attribute types with no '
-            'mentions; list any attribute mention not linked to any drug '
-            'under "unlinked". Return JSON {"drugs": [{"text": ..., '
-            '"<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}.'
+            "### Task\n"
+            "Extract every Drug mention in this note and its linked "
+            "clinical attributes, per the 2018 n2c2 Track 2 ADE/"
+            "medication-extraction schema (Henry et al. 2020, "
+            "JAMIA).\n\n"
+            "### Definitions\n"
+            "- **Drug**: a medication name (generic, brand, or drug "
+            "class)\n"
+            '- **Strength**: amount of active ingredient per dose unit '
+            '(e.g. "40 mg")\n'
+            "- **Form**: the drug's physical form (e.g. tablet, patch, "
+            "cream)\n"
+            '- **Dosage**: amount given per administration (e.g. "2 '
+            'tablets")\n'
+            '- **Frequency**: how often it\'s taken (e.g. "twice '
+            'daily")\n'
+            '- **Route**: how it enters the body (e.g. "PO", "IV", '
+            '"topically")\n'
+            "- **Duration**: how long it is/was taken\n"
+            "- **Reason**: the medical indication for the drug\n"
+            "- **ADE**: an adverse reaction attributed to the drug\n\n"
+            "Each attribute links to the Drug mention(s) it describes -- "
+            "any attribute type may link to more than one Drug, most "
+            "often Reason/ADE (e.g. one shared side effect attributed to "
+            "two co-administered drugs).\n\n"
+            "### Output Format\n"
+            "Nest each attribute mention under its linked Drug, keyed by "
+            "attribute type -- omit attribute types with no mentions; "
+            'list any attribute mention not linked to any drug under '
+            '"unlinked". Return JSON `{"drugs": [{"text": ..., '
+            '"<AttrType>": [...], ...}, ...], "unlinked": [{"type", '
+            '"text"}, ...]}`.'
         ),
     },
     "medication_event": {
         "category": "information_extraction",
         "display": "Medication_Event",
         "instruction": (
-            'Task: For each medication mention, classify whether a '
-            'medication change is discussed, per the CMED schema (Mahajan '
-            'et al. 2021).\n'
-            'Definitions: Disposition = a change is discussed (e.g. "start '
-            'Plavix"). NoDisposition = no change is discussed (e.g. '
-            '"continue lisinopril"). Undetermined = unclear from local '
-            'context (e.g. "Plan: Lasix"). For each Disposition mention, '
-            'also classify: Action -- Start/Stop/Increase/Decrease/'
-            'UniqueDose/OtherChange/Unknown; Certainty -- Certain/'
-            'Hypothetical/Conditional/Unknown; Temporality -- Past/Present/'
-            'Future/Unknown; Actor -- Physician/Patient/Unknown; Negation -- '
-            'Negated/NotNegated. A single mention may have 0, 1, or more '
-            'Disposition events.\n'
-            'OutputFormat: "trigger_text" is the medication mention itself '
-            '(the entity type in this task is always a medication -- '
-            '"trigger" names its role as what triggers the event, per this '
-            'schema\'s event-extraction terminology, not a different kind of '
-            'span). Return JSON {"events": [{"id", "type", '
-            '"trigger_text", "attributes": {"Action", "Certainty", '
-            '"Temporality", "Actor", "Negation"}}, ...]} -- "attributes" is '
-            'empty for NoDisposition/Undetermined events.'
+            "### Task\n"
+            "For each medication mention, classify whether a medication "
+            "change is discussed, per the CMED schema (Mahajan et al. "
+            "2021).\n\n"
+            "### Definitions\n"
+            '- **Disposition**: a change is discussed (e.g. "start '
+            'Plavix")\n'
+            '- **NoDisposition**: no change is discussed (e.g. '
+            '"continue lisinopril")\n'
+            '- **Undetermined**: unclear from local context (e.g. '
+            '"Plan: Lasix")\n\n'
+            "For each Disposition mention, also classify:\n"
+            "- **Action**: Start/Stop/Increase/Decrease/UniqueDose/"
+            "OtherChange/Unknown\n"
+            "- **Certainty**: Certain/Hypothetical/Conditional/Unknown\n"
+            "- **Temporality**: Past/Present/Future/Unknown\n"
+            "- **Actor**: Physician/Patient/Unknown\n"
+            "- **Negation**: Negated/NotNegated\n\n"
+            "A single mention may have 0, 1, or more Disposition "
+            "events.\n\n"
+            "### Output Format\n"
+            '"trigger_text" is the medication mention itself (the '
+            "entity type in this task is always a medication -- "
+            '"trigger" names its role as what triggers the event, per '
+            "this schema's event-extraction terminology, not a "
+            'different kind of span). Return JSON `{"events": [{"id", '
+            '"type", "trigger_text", "attributes": {"Action", '
+            '"Certainty", "Temporality", "Actor", "Negation"}}, ...]}` '
+            '-- "attributes" is empty for NoDisposition/Undetermined '
+            "events."
         ),
     },
     "sdoh_event": {
         "category": "information_extraction",
         "display": "SDoH",
         "instruction": (
-            'Task: Extract social-determinants-of-health (SDOH) events from '
-            'this note, per the SHAC annotation schema (Lybarger et al., '
-            '2022 n2c2 Track 2).\n'
-            'Definitions: an SDOH event is a trigger span (Employment, '
-            'LivingStatus, Tobacco, Alcohol, or Drug) plus role-labeled '
-            'argument spans. Employment roles: Status, Type (occupation), '
-            'Duration, History. LivingStatus roles: Status, Type (alone/'
-            'with_family/with_others/homeless), Duration, History. '
-            'Tobacco/Alcohol/Drug roles: Status, Type (the specific substance, '
-            'e.g. "beer"/"wine" for Alcohol, "cocaine"/"marijuana" for Drug, '
-            '"cigarettes" for Tobacco), Amount, Frequency, Method (how it\'s '
-            'consumed, e.g. "smoke"/"inject" -- mostly Drug-only; almost '
-            'never annotated for Alcohol and rare for Tobacco, since smoking '
-            'is the assumed default for both), Duration, History -- Drug '
-            'covers illicit drugs/marijuana/prescription misuse only (not '
-            'medical use), Tobacco covers first-hand smoking only. Status is '
-            'one of none/current/past/future for every trigger type (some '
-            'values are rare for a given type -- e.g. "future" is rare for '
-            'Tobacco/Alcohol/Drug, "none" is rare for LivingStatus -- but '
-            'none is impossible for any of them). Each role filler is '
-            '{"type", "text"}: type is usually the role\'s own name, but a '
-            'Status filler\'s type is '
-            'StatusTime (Tobacco/Alcohol/Drug/LivingStatus) or StatusEmploy '
-            '(Employment), and LivingStatus\'s Type filler\'s type is '
-            'TypeLiving. If a role has more than one filler, number the '
-            'extras: Type2/Type3, Amount2/Amount3, Duration2, Frequency2, '
-            'History2, Method2/Method3. Status/Type fillers carry their own '
-            'attribute value keyed by name -- StatusTimeVal (none/current/'
-            'past/future), StatusEmployVal (employed/unemployed/retired/'
-            'on_disability/student/homemaker), or TypeLivingVal (alone/'
-            'with_family/with_others/homeless).\n'
-            'OutputFormat: Return JSON {"events": [{"id", "type", '
-            '"trigger_text", "roles": {"<RoleName>": {"type", "text"}, ...}, '
-            '"attributes": [{"role", "name", "value"}, ...]}, ...]}.'
+            "### Task\n"
+            "Extract social-determinants-of-health (SDOH) events from "
+            "this note, per the SHAC annotation schema (Lybarger et "
+            "al., 2022 n2c2 Track 2). An SDOH event is a trigger span "
+            "(Employment, LivingStatus, Tobacco, Alcohol, or Drug) plus "
+            "role-labeled argument spans.\n\n"
+            "### Roles By Trigger Type\n"
+            "- **Employment**: Status, Type (occupation), Duration, "
+            "History\n"
+            "- **LivingStatus**: Status, Type (alone/with_family/"
+            "with_others/homeless), Duration, History\n"
+            '- **Tobacco/Alcohol/Drug**: Status, Type (the specific '
+            'substance, e.g. "beer"/"wine" for Alcohol, "cocaine"/'
+            '"marijuana" for Drug, "cigarettes" for Tobacco), Amount, '
+            'Frequency, Method (how it\'s consumed, e.g. "smoke"/'
+            '"inject" -- mostly Drug-only; almost never annotated for '
+            "Alcohol and rare for Tobacco, since smoking is the assumed "
+            "default for both), Duration, History -- Drug covers "
+            "illicit drugs/marijuana/prescription misuse only (not "
+            "medical use), Tobacco covers first-hand smoking only\n\n"
+            "### Status Values\n"
+            "Status is one of none/current/past/future for every "
+            'trigger type (some values are rare for a given type -- '
+            'e.g. "future" is rare for Tobacco/Alcohol/Drug, "none" is '
+            "rare for LivingStatus -- but none is impossible for any of "
+            "them).\n\n"
+            "### Role Filler Format\n"
+            'Each role filler is `{"type", "text"}`: type is usually '
+            "the role's own name, but a Status filler's type is "
+            "StatusTime (Tobacco/Alcohol/Drug/LivingStatus) or "
+            "StatusEmploy (Employment), and LivingStatus's Type "
+            "filler's type is TypeLiving. If a role has more than one "
+            "filler, number the extras: Type2/Type3, Amount2/Amount3, "
+            "Duration2, Frequency2, History2, Method2/Method3. Status/"
+            "Type fillers carry their own attribute value keyed by name "
+            "-- StatusTimeVal (none/current/past/future), "
+            "StatusEmployVal (employed/unemployed/retired/on_disability/"
+            "student/homemaker), or TypeLivingVal (alone/with_family/"
+            "with_others/homeless).\n\n"
+            "### Output Format\n"
+            'Return JSON `{"events": [{"id", "type", "trigger_text", '
+            '"roles": {"<RoleName>": {"type", "text"}, ...}, '
+            '"attributes": [{"role", "name", "value"}, ...]}, ...]}`.'
         ),
     },
     "family_history": {
         "category": "information_extraction",
         "display": "Family_History",
         "instruction": (
-            'Task: Extract family history from the note as an end-to-end '
-            'summary of member/side/living-status/observation, per the 2019 '
-            'n2c2 Track 2 Subtask 2 schema (Liu et al. 2018, BioCreative/'
-            'OHNLP).\n'
-            'Definitions: FamilyMember is one of Father/Mother/Parent/'
-            'Sister/Brother/Daughter/Son/Child/Grandmother/Grandfather/'
-            'Grandparent/Cousin/Sibling/Aunt/Uncle, each with a side of '
-            'family (Paternal/Maternal/NA -- first-degree relatives are '
-            'always NA). Observation is a disease/condition mentioned for a '
-            'family member. LivingStatus score = alive_score * '
-            'healthy_score, each in {Yes=2, NA=1, No=0} (so 4 = alive and '
-            'healthy, 0 = deceased). Only report a member here if the note '
-            'gives a living-status score and/or at least one observation '
-            'for them -- a member mentioned with neither is not part of '
-            'this summary.\n'
-            'OutputFormat: Return JSON with 2 keys: "living_status" (list '
-            'of {"member", "side", "score"}), "observations" (list of '
+            "### Task\n"
+            "Extract family history from the note as an end-to-end "
+            "summary of member/side/living-status/observation, per the "
+            "2019 n2c2 Track 2 Subtask 2 schema (Liu et al. 2018, "
+            "BioCreative/OHNLP).\n\n"
+            "### Definitions\n"
+            "- **FamilyMember**: one of Father/Mother/Parent/Sister/"
+            "Brother/Daughter/Son/Child/Grandmother/Grandfather/"
+            "Grandparent/Cousin/Sibling/Aunt/Uncle, each with a side of "
+            "family (Paternal/Maternal/NA -- first-degree relatives are "
+            "always NA)\n"
+            "- **Observation**: a disease/condition mentioned for a "
+            "family member\n"
+            "- **LivingStatus score** = alive_score * healthy_score, "
+            "each in {Yes=2, NA=1, No=0} (so 4 = alive and healthy, 0 = "
+            "deceased)\n\n"
+            "Only report a member here if the note gives a "
+            "living-status score and/or at least one observation for "
+            "them -- a member mentioned with neither is not part of "
+            "this summary.\n\n"
+            "### Output Format\n"
+            'Return JSON with 2 keys: "living_status" (list of '
+            '{"member", "side", "score"}), "observations" (list of '
             '{"member", "side", "text", "negation": "Negated"|'
             '"Non_Negated"}).'
         ),
@@ -305,9 +396,13 @@ TASKS = {
         "category": "information_extraction",
         "display": "Disorder_Normalization",
         "instruction": (
-            'Identify all disorder mentions in the clinical text and normalize '
-            'each to a UMLS/SNOMED-CT CUI, or "CUI-less" if no matching concept '
-            'exists. Return JSON {"entities": [{"text": ..., "cui": ...}, ...]}.'
+            "### Task\n"
+            "Identify all disorder mentions in the clinical text and "
+            'normalize each to a UMLS/SNOMED-CT CUI, or "CUI-less" if no '
+            "matching concept exists.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"entities": [{"text": ..., "cui": ...}, '
+            '...]}`.'
         ),
     },
     # Word-sense disambiguation: the label set (candidate expansions) is not
@@ -318,36 +413,78 @@ TASKS = {
         "category": "classification",
         "display": "Abbreviation_Disambiguation",
         "instruction": (
-            'Given a clinical abbreviation and its surrounding context, determine '
-            'what the abbreviation stands for in this specific context. '
-            'Return JSON {"expansion": ...}.'
+            "### Task\n"
+            "Given a clinical abbreviation and its surrounding context, "
+            "determine what the abbreviation stands for in this "
+            "specific context.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"expansion": ...}`.'
         ),
     },
     "qa_span_extraction": {
         "category": "question_answering",
         "display": "QA_Span_Extraction",
         "instruction": (
-            'Given the clinical note context and a question, extract the exact '
-            'answer as a verbatim substring of the context. Return JSON '
-            '{"answer": <exact substring of the context>}.'
+            "### Task\n"
+            "Given the clinical note context and a question, extract "
+            "the exact answer as a verbatim substring of the "
+            "context.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"answer": <exact substring of the '
+            'context>}`.'
         ),
     },
     "concept_assertion_relation": {
         "category": "information_extraction",
         "display": "Concept_Assertion_Relation",
         "instruction": (
-            'Extract all problem/test/treatment concepts; for each problem '
-            'concept also give its assertion status (present, absent, possible, '
-            'conditional, hypothetical, or associated_with_someone_else); and '
-            'extract the relations between concepts, one of: TrIP (treatment '
-            'improves problem), TrWP (treatment worsens problem), TrCP '
-            '(treatment causes problem), TrAP (treatment administered for '
-            'problem, outcome not stated), TrNAP (treatment NOT administered '
-            'because of problem), TeRP (test reveals problem), TeCP (test '
-            'conducted to investigate problem, outcome not known), PIP (one '
-            'problem indicates/causes another). Return JSON {"concepts": '
-            '[{"id", "type", "text", "assertion"}, ...], "relations": '
-            '[{"type", "arg1", "arg2"}, ...]}.'
+            "### Task\n"
+            "Extract every problem, test, and treatment concept. For "
+            "each problem concept, also give its assertion status. "
+            "Link related concepts with one of 8 relation types (same "
+            "sentence only).\n\n"
+            "### Concept Types\n"
+            "- **problem**: an abnormal finding about the patient's "
+            "body or mind that could be treated (a disease, sign/"
+            "symptom, or injury; excludes normal findings and raw "
+            "vital-sign/lab values)\n"
+            "- **test**: a procedure/panel/exam performed to find out "
+            "about a problem\n"
+            "- **treatment**: a procedure, device, or substance given "
+            "to resolve a problem\n\n"
+            "### Assertion Status (problem concepts only)\n"
+            "- **present** (default): stated to exist, now or in the "
+            "past\n"
+            "- **absent**: stated not to exist, ruled out, or "
+            "resolved\n"
+            '- **possible**: uncertain, e.g. "likely"/"probably not"/'
+            '"suspected"\n'
+            "- **conditional**: occurs only under specific "
+            "circumstances, e.g. exertional symptoms or a drug "
+            "allergy\n"
+            "- **hypothetical**: a problem the patient may develop in "
+            "the future\n"
+            "- **associated_with_someone_else**: concerns someone other "
+            "than the patient, e.g. family history\n\n"
+            "### Relations (same sentence only)\n"
+            "- **TrIP**: treatment improves/cures problem\n"
+            "- **TrWP**: treatment given for problem but doesn't help "
+            "or worsens it\n"
+            "- **TrCP**: treatment causes a different problem than the "
+            "one it was given for\n"
+            "- **TrAP**: treatment given for problem, outcome not "
+            "stated\n"
+            "- **TrNAP**: treatment withheld/stopped because of a "
+            "problem it didn't cause\n"
+            "- **TeRP**: test performed and reveals the problem\n"
+            "- **TeCP**: test performed to investigate the problem, "
+            "outcome not known\n"
+            "- **PIP**: one problem reveals, describes, or causes "
+            "another\n\n"
+            "### Output Format\n"
+            'Return JSON `{"concepts": [{"id", "type", "text", '
+            '"assertion"}, ...], "relations": [{"type", "arg1", '
+            '"arg2"}, ...]}`.'
         ),
     },
     # --- Tier A subtask-enrichment tasks (see design.md's "Fixing doc-level
@@ -362,47 +499,63 @@ TASKS = {
         "category": "information_extraction",
         "display": "NER_RE_Subtask_NERonly",
         "instruction": (
-            'Extract every Drug, Strength, Frequency, Dosage, Route, Duration, '
-            'Form, Reason, and ADE mention span in the text -- entities only, '
-            'no relation linking. Return JSON {"entities": [{"type": ..., '
-            '"text": ...}, ...]}.'
+            "### Task\n"
+            "Extract every Drug, Strength, Frequency, Dosage, Route, "
+            "Duration, Form, Reason, and ADE mention span in the text -- "
+            "entities only, no relation linking.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"entities": [{"type": ..., "text": ...}, '
+            '...]}`.'
         ),
     },
     "ner_re_medication_re_only": {
         "category": "information_extraction",
         "display": "NER_RE_Subtask_REonly",
         "instruction": (
-            'This note\'s Drug/Strength/Frequency/Dosage/Route/Duration/Form/'
-            'Reason/ADE entities have already been extracted and are listed '
-            'after the note text under EXTRACTED_ENTITIES. Link each non-Drug '
-            'entity to the Drug mention it describes (an entity may link to '
-            'more than one Drug); collect any entity never linked to a Drug '
-            'under "unlinked". Return JSON {"drugs": [{"text": ..., '
-            '"<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}.'
+            "### Task\n"
+            "This note's Drug/Strength/Frequency/Dosage/Route/Duration/"
+            "Form/Reason/ADE entities have already been extracted and "
+            "are listed after the note text under EXTRACTED_ENTITIES. "
+            "Link each non-Drug entity to the Drug mention it describes "
+            "(an entity may link to more than one Drug); collect any "
+            'entity never linked to a Drug under "unlinked".\n\n'
+            "### Output Format\n"
+            'Return JSON `{"drugs": [{"text": ..., "<AttrType>": [...], '
+            '...}, ...], "unlinked": [{"type", "text"}, ...]}`.'
         ),
     },
     "medication_event_trigger_only": {
         "category": "information_extraction",
         "display": "Medication_Event_Subtask_TriggerOnly",
         "instruction": (
-            'Extract every medication mention span and classify its '
-            'disposition type (Disposition, NoDisposition, or Undetermined) '
-            '-- triggers only, no attribute classification. Return JSON '
-            '{"triggers": [{"type": ..., "text": ...}, ...]}.'
+            "### Task\n"
+            "Extract every medication mention span and classify its "
+            "disposition type (Disposition, NoDisposition, or "
+            "Undetermined) -- triggers only, no attribute "
+            "classification.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"triggers": [{"type": ..., "text": ...}, '
+            '...]}`.'
         ),
     },
     "medication_event_attr_only": {
         "category": "information_extraction",
         "display": "Medication_Event_Subtask_AttrOnly",
         "instruction": (
-            'This note\'s medication triggers have already been identified '
-            'and are listed after the note text under EXTRACTED_TRIGGERS, '
-            'each with its disposition type. For each Disposition trigger, '
-            'classify: Action -- Start/Stop/Increase/Decrease/UniqueDose/'
-            'OtherChange/Unknown; Certainty -- Certain/Hypothetical/'
-            'Conditional/Unknown; Temporality -- Past/Present/Future/Unknown; '
-            'Actor -- Physician/Patient/Unknown; Negation -- Negated/'
-            'NotNegated. Return JSON {"events": [...]}.'
+            "### Task\n"
+            "This note's medication triggers have already been "
+            "identified and are listed after the note text under "
+            "EXTRACTED_TRIGGERS, each with its disposition type. For "
+            "each Disposition trigger, classify:\n\n"
+            "### Attributes\n"
+            "- **Action**: Start/Stop/Increase/Decrease/UniqueDose/"
+            "OtherChange/Unknown\n"
+            "- **Certainty**: Certain/Hypothetical/Conditional/Unknown\n"
+            "- **Temporality**: Past/Present/Future/Unknown\n"
+            "- **Actor**: Physician/Patient/Unknown\n"
+            "- **Negation**: Negated/NotNegated\n\n"
+            "### Output Format\n"
+            'Return JSON `{"events": [...]}`.'
         ),
     },
     # --- Paragraph-window task (see design.md's paragraph-chunking
@@ -415,12 +568,58 @@ TASKS = {
         "category": "information_extraction",
         "display": "NER_RE_Paragraph_Window",
         "instruction": (
-            'This is one paragraph excerpted from a larger clinical note, not '
-            'the complete note. Extract every Drug, Strength, Frequency, '
-            'Dosage, Route, Duration, Form, Reason, and ADE mention in THIS '
-            'EXCERPT ONLY and link each non-Drug entity to the Drug mention it '
-            'describes. Return JSON {"drugs": [{"text": ..., "<AttrType>": '
-            '[...], ...}, ...], "unlinked": [{"type", "text"}, ...]}.'
+            "### Task\n"
+            "This is one paragraph excerpted from a larger clinical "
+            "note, not the complete note. Extract every Drug, Strength, "
+            "Frequency, Dosage, Route, Duration, Form, Reason, and ADE "
+            "mention in THIS EXCERPT ONLY and link each non-Drug entity "
+            "to the Drug mention it describes.\n\n"
+            "### Output Format\n"
+            'Return JSON `{"drugs": [{"text": ..., "<AttrType>": [...], '
+            '...}, ...], "unlinked": [{"type", "text"}, ...]}`.'
+        ),
+    },
+    # --- Paragraph-window task for medication_event (2022n2c2_track1) --
+    # same mechanism as ner_re_medication_paragraph above (a genuinely new,
+    # smaller text span, not a relabeled whole note), HF-only, additive; see
+    # PARAGRAPH_OF below. Keeps the CMED disposition definitions (the model
+    # needs them to classify), scoped to "THIS EXCERPT ONLY".
+    "medication_event_paragraph": {
+        "category": "information_extraction",
+        "display": "Medication_Event_Paragraph_Window",
+        "instruction": (
+            "### Task\n"
+            "This is one paragraph excerpted from a larger clinical "
+            "note, not the complete note. For each medication mention "
+            "in THIS EXCERPT ONLY, classify whether a medication change "
+            "is discussed, per the CMED schema (Mahajan et al. "
+            "2021).\n\n"
+            "### Definitions\n"
+            '- **Disposition**: a change is discussed (e.g. "start '
+            'Plavix")\n'
+            '- **NoDisposition**: no change is discussed (e.g. '
+            '"continue lisinopril")\n'
+            '- **Undetermined**: unclear from local context (e.g. '
+            '"Plan: Lasix")\n\n'
+            "For each Disposition mention, also classify:\n"
+            "- **Action**: Start/Stop/Increase/Decrease/UniqueDose/"
+            "OtherChange/Unknown\n"
+            "- **Certainty**: Certain/Hypothetical/Conditional/Unknown\n"
+            "- **Temporality**: Past/Present/Future/Unknown\n"
+            "- **Actor**: Physician/Patient/Unknown\n"
+            "- **Negation**: Negated/NotNegated\n\n"
+            "A single mention may have 0, 1, or more Disposition "
+            "events.\n\n"
+            "### Output Format\n"
+            '"trigger_text" is the medication mention itself (the '
+            "entity type in this task is always a medication -- "
+            '"trigger" names its role as what triggers the event, per '
+            "this schema's event-extraction terminology, not a "
+            'different kind of span). Return JSON `{"events": [{"id", '
+            '"type", "trigger_text", "attributes": {"Action", '
+            '"Certainty", "Temporality", "Actor", "Negation"}}, ...]}` '
+            '-- "attributes" is empty for NoDisposition/Undetermined '
+            "events."
         ),
     },
     # --- Tier A subtask-enrichment tasks for concept_assertion_relation
@@ -430,29 +629,67 @@ TASKS = {
         "category": "information_extraction",
         "display": "Concept_Assertion_Relation_Subtask_NERonly",
         "instruction": (
-            'Extract every problem, test, and treatment concept mention span '
-            'in the text -- concepts only, no assertion classification, no '
-            'relation linking. Return JSON {"concepts": [{"type": ..., '
-            '"text": ...}, ...]}.'
+            "### Task\n"
+            "Extract every problem, test, and treatment concept mention "
+            "span in the text -- concepts only, no assertion "
+            "classification, no relation linking.\n\n"
+            "### Concept Types\n"
+            "- **problem**: an abnormal finding about the patient's "
+            "body or mind that could be treated (a disease, sign/"
+            "symptom, or injury; excludes normal findings and raw "
+            "vital-sign/lab values)\n"
+            "- **test**: a procedure/panel/exam performed to find out "
+            "about a problem\n"
+            "- **treatment**: a procedure, device, or substance given "
+            "to resolve a problem\n\n"
+            "### Output Format\n"
+            'Return JSON `{"concepts": [{"type": ..., "text": ...}, '
+            '...]}`.'
         ),
     },
     "concept_assertion_relation_re_only": {
         "category": "information_extraction",
         "display": "Concept_Assertion_Relation_Subtask_REonly",
         "instruction": (
-            'This note\'s problem/test/treatment concepts have already been '
-            'extracted and are listed after the note text under '
-            'EXTRACTED_CONCEPTS. For each problem concept, give its assertion '
-            'status (present, absent, possible, conditional, hypothetical, or '
-            'associated_with_someone_else); and extract the relations between '
-            'concepts, one of: TrIP (treatment improves problem), TrWP '
-            '(treatment worsens problem), TrCP (treatment causes problem), '
-            'TrAP (treatment administered for problem, outcome not stated), '
-            'TrNAP (treatment NOT administered because of problem), TeRP (test '
-            'reveals problem), TeCP (test conducted to investigate problem, '
-            'outcome not known), PIP (one problem indicates/causes another). '
-            'Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
-            '"relations": [{"type", "arg1", "arg2"}, ...]}.'
+            "### Task\n"
+            "This note's problem/test/treatment concepts have already "
+            "been extracted and are listed after the note text under "
+            "EXTRACTED_CONCEPTS. For each problem concept, give its "
+            "assertion status. Link related concepts with one of 8 "
+            "relation types (same sentence only).\n\n"
+            "### Assertion Status\n"
+            "- **present** (default): stated to exist, now or in the "
+            "past\n"
+            "- **absent**: stated not to exist, ruled out, or "
+            "resolved\n"
+            '- **possible**: uncertain, e.g. "likely"/"probably not"/'
+            '"suspected"\n'
+            "- **conditional**: occurs only under specific "
+            "circumstances, e.g. exertional symptoms or a drug "
+            "allergy\n"
+            "- **hypothetical**: a problem the patient may develop in "
+            "the future\n"
+            "- **associated_with_someone_else**: concerns someone other "
+            "than the patient, e.g. family history\n\n"
+            "### Relations (same sentence only)\n"
+            "- **TrIP**: treatment improves/cures problem\n"
+            "- **TrWP**: treatment given for problem but doesn't help "
+            "or worsens it\n"
+            "- **TrCP**: treatment causes a different problem than the "
+            "one it was given for\n"
+            "- **TrAP**: treatment given for problem, outcome not "
+            "stated\n"
+            "- **TrNAP**: treatment withheld/stopped because of a "
+            "problem it didn't cause\n"
+            "- **TeRP**: test performed and reveals the problem\n"
+            "- **TeCP**: test performed to investigate the problem, "
+            "outcome not known\n"
+            "- **PIP**: one problem reveals, describes, or causes "
+            "another\n\n"
+            "### Output Format\n"
+            'Return JSON `{"concepts": [{"id", "type", "text", '
+            '"assertion"}, ...], "relations": [{"type", "arg1", '
+            '"arg2"}, ...]}`.'
         ),
     },
     # --- Section-window task for concept_assertion_relation (2010_i2b2_va)
@@ -464,20 +701,56 @@ TASKS = {
         "category": "information_extraction",
         "display": "Concept_Assertion_Relation_Section_Window",
         "instruction": (
-            'This is one section excerpted from a larger clinical note (e.g. '
-            '"HISTORY OF PRESENT ILLNESS", "PAST MEDICAL HISTORY"), not the '
-            'complete note. Extract every problem, test, and treatment concept '
-            'in THIS EXCERPT ONLY, give each problem concept\'s assertion '
-            'status (present, absent, possible, conditional, hypothetical, or '
-            'associated_with_someone_else), and extract the relations between '
-            'concepts, one of: TrIP (treatment improves problem), TrWP '
-            '(treatment worsens problem), TrCP (treatment causes problem), '
-            'TrAP (treatment administered for problem, outcome not stated), '
-            'TrNAP (treatment NOT administered because of problem), TeRP (test '
-            'reveals problem), TeCP (test conducted to investigate problem, '
-            'outcome not known), PIP (one problem indicates/causes another). '
-            'Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], '
-            '"relations": [{"type", "arg1", "arg2"}, ...]}.'
+            "### Task\n"
+            "This is one section excerpted from a larger clinical note "
+            '(e.g. "HISTORY OF PRESENT ILLNESS", "PAST MEDICAL '
+            'HISTORY"), not the complete note. Extract every problem, '
+            "test, and treatment concept in THIS EXCERPT ONLY. For each "
+            "problem concept, give its assertion status. Link related "
+            "concepts with one of 8 relation types (same sentence "
+            "only).\n\n"
+            "### Concept Types\n"
+            "- **problem**: an abnormal finding about the patient's "
+            "body or mind that could be treated (a disease, sign/"
+            "symptom, or injury; excludes normal findings and raw "
+            "vital-sign/lab values)\n"
+            "- **test**: a procedure/panel/exam performed to find out "
+            "about a problem\n"
+            "- **treatment**: a procedure, device, or substance given "
+            "to resolve a problem\n\n"
+            "### Assertion Status\n"
+            "- **present** (default): stated to exist, now or in the "
+            "past\n"
+            "- **absent**: stated not to exist, ruled out, or "
+            "resolved\n"
+            '- **possible**: uncertain, e.g. "likely"/"probably not"/'
+            '"suspected"\n'
+            "- **conditional**: occurs only under specific "
+            "circumstances, e.g. exertional symptoms or a drug "
+            "allergy\n"
+            "- **hypothetical**: a problem the patient may develop in "
+            "the future\n"
+            "- **associated_with_someone_else**: concerns someone other "
+            "than the patient, e.g. family history\n\n"
+            "### Relations (same sentence only)\n"
+            "- **TrIP**: treatment improves/cures problem\n"
+            "- **TrWP**: treatment given for problem but doesn't help "
+            "or worsens it\n"
+            "- **TrCP**: treatment causes a different problem than the "
+            "one it was given for\n"
+            "- **TrAP**: treatment given for problem, outcome not "
+            "stated\n"
+            "- **TrNAP**: treatment withheld/stopped because of a "
+            "problem it didn't cause\n"
+            "- **TeRP**: test performed and reveals the problem\n"
+            "- **TeCP**: test performed to investigate the problem, "
+            "outcome not known\n"
+            "- **PIP**: one problem reveals, describes, or causes "
+            "another\n\n"
+            "### Output Format\n"
+            'Return JSON `{"concepts": [{"id", "type", "text", '
+            '"assertion"}, ...], "relations": [{"type", "arg1", '
+            '"arg2"}, ...]}`.'
         ),
     },
 }
@@ -502,6 +775,7 @@ SUBTASK_OF = {
 PARAGRAPH_OF = {
     "ner_re_medication_paragraph": "ner_re_medication",
     "concept_assertion_relation_section": "concept_assertion_relation",
+    "medication_event_paragraph": "medication_event",
 }
 
 # The 13 fixed cohort-eligibility criteria (2018 n2c2 Track 1), in the order
@@ -623,6 +897,71 @@ def render_messages(task: str, input_text: str, target) -> list:
     ]
 
 
+# Some builders append already-extracted context after the raw note text,
+# separated by this exact "\n\n<LABEL>:\n" convention (see
+# builders/ner_re_2018_t2.py's RE-only and builders/medication_event_2022_t1.py's
+# attr-only input_text construction: f"{doc_text}\n\nEXTRACTED_ENTITIES:\n{...}").
+# Recognized here so the markdown renderer can give that block its own
+# fenced section instead of burying already-structured context (a bullet
+# list of pre-extracted entities/triggers, not raw note prose) inside the
+# same code fence as the note -- the plain renderer is untouched, since
+# flat prose has no such seam to preserve.
+_EXTRACTED_CONTEXT_MARKERS = ("EXTRACTED_ENTITIES", "EXTRACTED_TRIGGERS")
+
+
+def _render_input_sections_md(input_text: str) -> str:
+    for marker in _EXTRACTED_CONTEXT_MARKERS:
+        needle = f"\n\n{marker}:\n"
+        idx = input_text.find(needle)
+        if idx == -1:
+            continue
+        note_text = input_text[:idx]
+        extra_text = input_text[idx + len(needle):]
+        label = marker.replace("_", " ").title()
+        return (
+            f"## Input\n```\n{note_text}\n```\n\n"
+            f"## {label}\n```\n{extra_text}\n```"
+        )
+    return f"## Input\n```\n{input_text}\n```"
+
+
+def render_md(task: str, input_text: str, target) -> str:
+    """Markdown-formatted variant of render(): same content, but the
+    instruction and input get their own ## sections and the input is
+    fenced, so dense instruction prose and raw note text (which often
+    contains its own pseudo-headers, e.g. section titles) don't visually
+    run together."""
+    _check_task(task)
+    meta = TASKS[task]
+    category = CATEGORIES[meta["category"]]
+    return (
+        f"{tag(task)}\n"
+        f"{category['system']}\n\n"
+        f"## Instructions\n"
+        f"{meta['instruction']}\n\n"
+        f"{_render_input_sections_md(input_text)}\n\n"
+        f"## Output\n"
+        f"{_target_str(task, target)}"
+    )
+
+
+def render_messages_md(task: str, input_text: str, target) -> list:
+    """Markdown-formatted variant of render_messages(): same role split,
+    but the user turn separates instruction from input the same way as
+    render_md()."""
+    _check_task(task)
+    meta = TASKS[task]
+    category = CATEGORIES[meta["category"]]
+    return [
+        {"role": "system", "content": f"{tag(task)}\n{category['system']}"},
+        {"role": "user", "content": (
+            f"## Instructions\n{meta['instruction']}\n\n"
+            f"{_render_input_sections_md(input_text)}"
+        )},
+        {"role": "assistant", "content": _target_str(task, target)},
+    ]
+
+
 def example(task, dataset, split, locator, input_text, target):
     """Build one unified-dataset record. Carries both the flat causal-LM
     text sequence (used by build_unified_dataset.py/token_stats.py) and the
@@ -636,4 +975,6 @@ def example(task, dataset, split, locator, input_text, target):
         "id": locator,
         "text": render(task, input_text, target),
         "messages": render_messages(task, input_text, target),
+        "text_md": render_md(task, input_text, target),
+        "messages_md": render_messages_md(task, input_text, target),
     }

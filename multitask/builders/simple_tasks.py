@@ -100,6 +100,53 @@ def build_mmlu_pro_health(split):
 
 
 # ---------------------------------------------------------------------------
+# BIOSSES -- biomedical-literature sentence-pair similarity (HF arrow
+# dataset), discretized to classification the same way
+# multitask.builders.sts_2019_t1.build_sts_classification discretizes 2019
+# n2c2 Track 1's clinical STS -- but a different 5-category vocabulary
+# (very_weak/.../very_strong, the standard correlation-strength bands) since
+# BIOSSES' 0-4 SemEval-2012 scale and domain (TAC Biomedical Summarization
+# Track literature sentences, not clinical notes) don't match STS_CATEGORIES.
+# Added as an out-of-domain eval-only check (test-only, never merged into
+# train_unified.jsonl) -- see multitask.eval.simple_tasks for the scorer.
+# A companion candidate, EBMSASS, was evaluated and rejected: its own
+# annotations skew heavily to "unrelated", which would collapse most of any
+# discretization into one dominant class -- a poor discriminative OOD test.
+# ---------------------------------------------------------------------------
+BIOSSES_CATEGORIES = ("very_weak", "weak", "moderate", "strong", "very_strong")
+
+
+def _bucket_biosses(score):
+    """Raw 0-4 BIOSSES score -> one of BIOSSES_CATEGORIES, via the standard
+    correlation-strength bands over the normalized (score/4) value: [0,.2)
+    very_weak, [.2,.4) weak, [.4,.6) moderate, [.6,.8) strong, [.8,1] very_strong.
+    Must stay in sync with the duplicate in multitask/eval/simple_tasks.py."""
+    norm = score / 4.0
+    if norm < 0.2:
+        return "very_weak"
+    if norm < 0.4:
+        return "weak"
+    if norm < 0.6:
+        return "moderate"
+    if norm < 0.8:
+        return "strong"
+    return "very_strong"
+
+
+def build_biosses(split):
+    from datasets import load_from_disk
+
+    ds = load_from_disk(str(ROOT / "biosses"))
+    # Single-split arrow dataset (100 pairs); treat it all as "test" (no train/dev given upstream).
+    if split != "test":
+        return
+    for i, rec in enumerate(ds):
+        input_text = f"Sentence 1: {rec['sentence1']}\nSentence 2: {rec['sentence2']}"
+        target = {"category": _bucket_biosses(rec["score"])}
+        yield example("similarity_classification", "biosses", split, f"biosses#{i}", input_text, target)
+
+
+# ---------------------------------------------------------------------------
 # medmcqa -- MCQA + explanation
 # ---------------------------------------------------------------------------
 MEDMCQA_DIR = ROOT / "medmcqa/raw"

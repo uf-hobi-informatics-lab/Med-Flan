@@ -85,6 +85,7 @@ for why this doesn't reach P=R=F1=1.0):
     python -m multitask.convert_back.ner_re_2018_t2
 """
 import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -237,6 +238,139 @@ def write_anns(predictions, out_dir):
     return out_dir
 
 
+# --- Paragraph-window prediction merge (design.md's paragraph-chunking
+# section's "reassembly step") -- lets a model trained ONLY on
+# ner_re_medication_paragraph (multitask.builders.ner_re_2018_t2.
+# build_ner_re_medication_paragraph) still be scored against the SAME
+# whole-note gold as the doc-level task, via multitask.eval.paragraph_eval.
+# Each paragraph's predicted JSON is converted to .ann via to_ann() above,
+# scoped to just that paragraph's own text (the model never saw the rest of
+# the note, so confining span search to its own paragraph -- rather than the
+# whole document -- avoids picking a same-text mention from a different
+# paragraph; see to_ann's/reanchor's decoy-ambiguity discussion), then every
+# real span is shifted back into the whole document's coordinates and every
+# T/R id is renumbered so paragraphs can be concatenated into one legal .ann
+# per document.
+_T_LINE = re.compile(r"^(T\d+)\t(\S+) (\d+) (\d+)\t(.*)$")
+_R_LINE = re.compile(r"^(R\d+)\t(\S+) Arg1:(T\d+) Arg2:(T\d+)$")
+
+
+def _paragraph_items_by_doc(split):
+    """{doc_id: (doc_text, [(start, end), ...])} for every doc in split --
+    reuses the builder's own _iter_docs/_iter_paragraphs (same blank-line
+    spans, filtered to non-empty-gold ones) so the i-th surviving span here
+    is exactly the paragraph a `{doc_stem}__p{i}` id refers to. Recomputed
+    here rather than read back off the built dataset (which stores no
+    offsets), since it's fully deterministic from the same .txt/.ann files
+    the doc-level gold scorer (GOLD_DIR) already reads."""
+    from multitask.builders.ner_re_2018_t2 import _iter_docs, _iter_paragraphs
+
+    result = {}
+    for txt_path, doc_text, doc in _iter_docs(split):
+        spans = [(start, end) for start, end, _para_text, _para_doc in _iter_paragraphs(doc_text, doc)]
+        result[txt_path.stem] = (doc_text, spans)
+    return result
+
+
+def _merge_paragraph_anns(doc_text, para_items):
+    """para_items: ordered [(para_start, para_end, target), ...] for one
+    document. Returns whole-document .ann text with every paragraph's
+    predictions offset-shifted into global coordinates and every T/R id
+    renumbered uniquely. Poison spans (to_ann's fallback for an
+    unresolvable mention -- see its docstring -- detected here as
+    start >= len(that paragraph's own text)) are reassigned fresh, from a
+    single counter starting past the end of the FULL document, so poison
+    spans from different paragraphs can never collide with each other or
+    with a later paragraph's real (shifted) spans -- same invariant to_ann
+    itself relies on, just reapplied once for the whole merged document
+    instead of once per paragraph."""
+    lines = []
+    tid = rid = 0
+    poison = len(doc_text) + 1
+
+    def _next_poison():
+        nonlocal poison
+        span = (poison, poison + 1)
+        poison += 1
+        return span
+
+    for para_start, para_end, target in para_items:
+        para_text = doc_text[para_start:para_end]
+        id_map = {}
+        for line in to_ann(target, para_text).splitlines():
+            m = _T_LINE.match(line)
+            if m:
+                old_id, etype, start, end, text = m.groups()
+                start, end = int(start), int(end)
+                new_span = _next_poison() if start >= len(para_text) else (start + para_start, end + para_start)
+                tid += 1
+                new_id = f"T{tid}"
+                id_map[old_id] = new_id
+                lines.append(f"{new_id}\t{etype} {new_span[0]} {new_span[1]}\t{text}")
+                continue
+            m = _R_LINE.match(line)
+            if m:
+                old_id, rtype, arg1, arg2 = m.groups()
+                rid += 1
+                lines.append(f"R{rid}\t{rtype} Arg1:{id_map[arg1]} Arg2:{id_map[arg2]}")
+
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def write_anns_from_paragraphs(completions, split="test", out_dir=None):
+    """completions: {paragraph_id: raw completion string or already-parsed
+    dict}, paragraph_id = f"{doc_stem}__p{i}" (build_ner_re_medication_
+    paragraph's own id scheme -- doc stems in this dataset are plain
+    numeric, so splitting on the LAST "__p" is unambiguous). Groups by
+    document, merges each doc's paragraph predictions back into one
+    whole-note .ann (_merge_paragraph_anns), and writes <doc_stem>.ann per
+    doc under out_dir (a fresh temp dir if omitted) -- so the existing
+    whole-note GOLD_DIR can score it with score_dirs() exactly like the
+    doc-level pipeline. A surviving paragraph with no completion at all
+    (e.g. --limit cut inference short) is scored as an empty prediction
+    (all its gold entities become false negatives) rather than silently
+    dropped -- a warning lists which. Returns out_dir."""
+    from multitask.eval.simple_tasks import parse_completion
+
+    doc_index = _paragraph_items_by_doc(split)
+    by_doc = {doc_id: {} for doc_id in doc_index}
+    for para_id, completion in completions.items():
+        doc_id, _sep, idx_str = para_id.rpartition("__p")
+        if doc_id not in by_doc:
+            print(f"[write_anns_from_paragraphs] skipping unknown paragraph id {para_id!r}", file=sys.stderr)
+            continue
+        target = completion if isinstance(completion, (dict, list)) else parse_completion(completion)
+        by_doc[doc_id][int(idx_str)] = target
+
+    out_dir = Path(out_dir) if out_dir else Path(tempfile.mkdtemp())
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for doc_id, (doc_text, spans) in doc_index.items():
+        targets_by_idx = by_doc[doc_id]
+        missing = [i for i in range(len(spans)) if i not in targets_by_idx]
+        if missing:
+            print(
+                f"[write_anns_from_paragraphs] {doc_id}: no completion for paragraph(s) "
+                f"{missing} of {len(spans)} -- scored as empty prediction", file=sys.stderr,
+            )
+        para_items = [(start, end, targets_by_idx.get(i) or {}) for i, (start, end) in enumerate(spans)]
+        ann_text = _merge_paragraph_anns(doc_text, para_items)
+        (out_dir / f"{doc_id}.ann").write_text(ann_text, encoding="utf-8")
+    return out_dir
+
+
+def score_paragraph_predictions(completions, split="test"):
+    """One-call convenience: merge paragraph-level completions back to doc
+    level (write_anns_from_paragraphs) and score them against the SAME
+    whole-note GOLD_DIR/score_dirs the doc-level ner_re_medication task
+    uses -- so a model trained only on ner_re_medication_paragraph is
+    directly comparable to one trained on the whole-note task, not scored
+    on some separate/weaker metric. See multitask.eval.paragraph_eval for
+    the CLI wrapper around this."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = write_anns_from_paragraphs(completions, split, tmp)
+        score_dirs(GOLD_DIR, out_dir)
+
+
 def score_dirs(gold_dir, system_dir):
     """Score system_dir's .ann predictions against gold_dir using the new
     unified brat_scorer (see module docstring) rather than the official
@@ -277,5 +411,34 @@ def _examples_with_raw_target(split):
         yield {"id": txt_path.stem, "target": _build_ner_re_target(doc)}
 
 
+def _examples_with_raw_target_paragraph(split):
+    """Same pattern as _examples_with_raw_target, but one entry per
+    surviving paragraph -- yields {"id": "<doc_stem>__p<i>", "target":
+    <drugs/unlinked dict>}, same id scheme as
+    build_ner_re_medication_paragraph. Used by _self_check_paragraph to
+    exercise the merge/reassembly machinery with known-good targets."""
+    from multitask.builders.ner_re_2018_t2 import _build_ner_re_target, _iter_docs, _iter_paragraphs
+
+    for txt_path, doc_text, doc in _iter_docs(split):
+        for i, (_start, _end, _para_text, para_doc) in enumerate(_iter_paragraphs(doc_text, doc)):
+            yield {"id": f"{txt_path.stem}__p{i}", "target": _build_ner_re_target(para_doc)}
+
+
+def _self_check_paragraph():
+    """Round-trip the paragraph dataset's OWN gold-derived targets (same
+    ones build_ner_re_medication_paragraph trains on) through
+    write_anns_from_paragraphs -> score against the whole-note GOLD_DIR --
+    proves the merge/reassembly machinery itself introduces no bugs, using
+    known-good paragraph targets as the "predictions", isolated from
+    whatever a real model does. Expect a score in the same ballpark as
+    _self_check()'s whole-note round-trip, not exactly 1.0, for the same
+    reason (see module docstring's "Known limitation": text-only span
+    reconstruction has an inherent ceiling)."""
+    completions = {ex["id"]: ex["target"] for ex in _examples_with_raw_target_paragraph("test")}
+    print("=== paragraph self-check: gold paragraph JSON -> merged .ann -> brat_scorer ===")
+    score_paragraph_predictions(completions, "test")
+
+
 if __name__ == "__main__":
     _self_check()
+    _self_check_paragraph()

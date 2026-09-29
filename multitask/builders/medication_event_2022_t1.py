@@ -11,6 +11,7 @@ roles are used in the released training data (annotation.conf defines
 from pathlib import Path
 
 from multitask.brat import parse_ann
+from multitask.chunk_utils import paragraph_spans, project_doc_onto_span
 from multitask.io_utils import read_text
 from multitask.schemas import example
 from multitask.target_schema import CMED_ATTR_NAMES
@@ -105,3 +106,36 @@ def build_medication_event_attr_only(split):
             "medication_event_attr_only", "2022n2c2_track1_attr_only", split, txt_path.stem,
             input_text, {"events": events},
         )
+
+
+def _iter_paragraphs(doc_text, doc):
+    """Yields (para_text, para_events) for every paragraph whose events
+    survive the span projection -- mirrors ner_re_2018_t2._iter_paragraphs
+    but for track1's event-based target (events/attributes, not entities/
+    relations). Paragraphs with no surviving events (headers, blank fields,
+    or orphan spans) are skipped -- no training signal. project_doc_onto_span
+    keeps events/attributes unchanged and filters by trigger entity, so a
+    trigger straddling a boundary is dropped (measured: 2/9012 = 0.022%)."""
+    for start, end in paragraph_spans(doc_text):
+        para_doc = project_doc_onto_span(doc, start, end)
+        events = _build_events(para_doc)
+        if not events:
+            continue
+        yield doc_text[start:end], events
+
+
+def build_medication_event_paragraph(split):
+    """Paragraph-window subtask: same events+attributes target shape as the
+    parent task, scoped to one paragraph instead of the whole note -- see
+    design.md's paragraph-chunking section. HF-only, additive (train+dev+
+    test all built, since track1 ships a real dev split, for experimentation
+    flexibility); not wired into the doc-level authoritative eval pipeline
+    (run_eval.py/convert_back untouched), mirroring
+    ner_re_medication_paragraph. Drops the ~0.02% of events whose trigger
+    span straddles two paragraphs."""
+    for txt_path, doc_text, doc in _iter_docs(split):
+        for i, (para_text, events) in enumerate(_iter_paragraphs(doc_text, doc)):
+            yield example(
+                "medication_event_paragraph", "2022n2c2_track1_paragraph", split,
+                f"{txt_path.stem}__p{i}", para_text, {"events": events},
+            )

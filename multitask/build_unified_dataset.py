@@ -19,7 +19,7 @@ from multitask.builders.medication_event_2022_t1 import build_medication_event
 from multitask.builders.ner_re_2018_t2 import build_ner_re_medication
 from multitask.builders.sdoh_2022_t2 import build_sdoh_event
 from multitask.builders.simple_tasks import (
-    build_bionli, build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
+    build_biosses, build_bionli, build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
     build_mednli, build_mmlu_pro_health, build_nli4ct, build_pubmedqa, build_umn_abbreviation,
 )
 from multitask.builders.sts_2019_t1 import build_sts, build_sts_classification
@@ -43,6 +43,12 @@ REGISTRY = [
     ("MedQA-USMLE-Mainland", lambda s: build_medqa("MedQA-USMLE-Mainland", s), ["train", "dev", "test"]),
     ("MedQA-USMLE-Taiwan", lambda s: build_medqa("MedQA-USMLE-Taiwan", s), ["train", "dev", "test"]),
     ("MMLU-Pro-Health", build_mmlu_pro_health, ["test"]),  # upstream ships only one split
+    # OOD-only check (not clinical-note domain): a different topic-similarity
+    # dataset from the other 11, added specifically to sanity-check the
+    # model's output distribution isn't overfit to this repo's own tasks --
+    # see multitask.builders.simple_tasks.build_biosses's module comment.
+    # Upstream ships only one split too, so test-only, same as MMLU-Pro-Health.
+    ("biosses", build_biosses, ["test"]),
     # medmcqa's released test split has null answers for all examples (the
     # public test set never shipped gold labels) -- unlike every other
     # dataset here, "test" is unusable for scoring at all, so it's left out
@@ -72,6 +78,48 @@ REGISTRY = [
 
 def safe_name(name: str) -> str:
     return name.replace(" ", "_").replace("(", "").replace(")", "")
+
+
+# The smallest task slices in the whole training mix by 100-1000x (98-350
+# examples each, vs. 18k-211k for the QA/classification tasks -- see
+# `python -c "import json,collections; ..."` count over train_unified.jsonl,
+# or just re-run this module and read the [train] lines below). Investigated
+# this session as a likely contributor to these tasks' generation quality
+# staying well below published baselines even after a separate
+# frequency_penalty decoding bug was found and fixed (multitask.inference.
+# run_generation.DEFAULT_GEN's comment has the full writeup) -- sdoh_event,
+# the one IE task with a comparatively large slice (3067), recovered to
+# near-baseline after that fix; these did not.
+#
+# Upsampled here by adding a SECOND training row per example, rendered via
+# schemas.render_md/render_messages_md instead of render/render_messages --
+# already computed by schemas.example() as "text_md"/"messages_md" on every
+# example, just not previously emitted as its own row in train_unified.jsonl
+# (build_hf_datasets.py already builds a separate "<name>_md" HF dataset
+# per REGISTRY entry, but that's never merged into this file). This is
+# genuine input-format diversity (different section-header/fenced-code
+# framing of the same content), not an exact-duplicate row -- a real, if
+# modest, augmentation rather than empty repetition. Train-only: eval/test
+# is untouched, so no scored metric is affected by this, only what the SFT
+# trainer sees. Add/remove task tags here to tune -- e.g. drop sdoh_event in
+# since it's not struggling the same way, or add it back if 2x still isn't
+# enough for the others and you want a matched multiplier across all IE
+# tasks.
+UPSAMPLE_MD_TASKS = {
+    "family_history", "concept_assertion_relation", "disorder_normalization",
+    "ner_re_medication", "medication_event",
+}
+
+
+def _markdown_duplicate(ex):
+    """A second training row for `ex`, swapped to its own already-computed
+    markdown rendering (see UPSAMPLE_MD_TASKS above) -- id gets a "#md"
+    suffix so it never collides with the original row."""
+    dup = dict(ex)
+    dup["id"] = f"{ex['id']}#md"
+    dup["text"] = ex["text_md"]
+    dup["messages"] = ex["messages_md"]
+    return dup
 
 
 def _write_jsonl(path, examples):
@@ -123,6 +171,11 @@ def main(seed: int = 13):
             print(f"[dev]   {name}: {len(carved)} examples carved from test (merged validation only, overlaps test)")
 
     rng = random.Random(seed)
+
+    md_dups = [_markdown_duplicate(ex) for ex in train_examples if ex["task"] in UPSAMPLE_MD_TASKS]
+    train_examples.extend(md_dups)
+    print(f"\n[upsample] added {len(md_dups)} markdown-rendering duplicate(s) for {sorted(UPSAMPLE_MD_TASKS)}")
+
     rng.shuffle(train_examples)
     rng.shuffle(dev_examples)
 

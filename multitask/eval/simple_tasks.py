@@ -18,6 +18,13 @@ mcqa_explain's "explanation" field is intentionally not scored -- there's
 no official metric for free-text rationale quality here, and the plan
 never called for one; only "answer" is compared.
 
+nli (MedNLI, bionli, nli4ct) is scored with accuracy + macro precision/
+recall/F1 over entailment/contradiction/neutral (per arxiv.org/abs/2305.03598,
+which reports both for NLI) -- macro-averaged over whatever label set is
+actually observed in gold/predictions for that dataset, so bionli/nli4ct's
+binary (entailment/contradiction only, no neutral) label space doesn't get
+penalized for a class it never uses.
+
 sts_classification (see multitask.builders.sts_2019_t1) is the discretized,
 additive alternative to sts_regression -- scored with accuracy + macro
 precision/recall/F1 (flat, per-category) *and* quadratic-weighted Cohen's
@@ -49,6 +56,7 @@ DATASETS = {
     "multilabel_cls": ["covid_LitCovid"],
     "abbreviation_disambiguation": ["umn_abbreviation"],
     "sts_classification": ["2019_n2c2_track1_cls"],
+    "similarity_classification": ["biosses"],
 }
 
 # Must match multitask.builders.sts_2019_t1.STS_CATEGORIES /
@@ -66,6 +74,12 @@ _STS_ANCHOR_CATEGORY = (
     "mostly_equivalent", "mostly_equivalent",
     "highly_equivalent", "highly_equivalent",
 )
+
+# Must match multitask.builders.simple_tasks.BIOSSES_CATEGORIES /
+# _bucket_biosses exactly (5 ordinal categories over the normalized 0-4
+# BIOSSES score) -- fixed here rather than imported for the same reason as
+# the STS tuple above (no dependency on builders/ for scoring).
+_SIMILARITY_CATEGORIES = ("very_weak", "weak", "moderate", "strong", "very_strong")
 
 _JSON_OBJ_RE = re.compile(r"\{.*\}", re.S)
 
@@ -109,6 +123,52 @@ def _accuracy(rows, predictions, key):
         if _norm(pred.get(key)) == _norm(gold.get(key)):
             correct += 1
     return {"n": n, "accuracy": correct / n if n else 0.0}
+
+
+def _categorical_prf(rows, predictions, key):
+    """Accuracy + macro precision/recall/F1 for an unordered multiclass
+    field (NLI's entailment/contradiction/neutral). Unlike
+    _ordinal_classification_metrics, there's no ordinal "closeness" between
+    labels for a kappa to weight, so this only does per-class TP/FP/FN ->
+    macro P/R/F1, macro-averaged over the categories actually observed in
+    gold/predictions rather than a fixed category tuple -- so a
+    binary-only dataset (bionli, nli4ct) isn't scored against a "neutral"
+    class it never has an example of."""
+    gold_labels = [_norm(gold.get(key)) for _, _, gold in rows]
+    pred_labels = [_norm(parse_completion(predictions.get(doc_id)).get(key))
+                   for doc_id, _, _ in rows]
+
+    categories = sorted(set(gold_labels) | set(pred_labels), key=lambda c: (c is None, c))
+    tp = {c: 0 for c in categories}
+    fp = {c: 0 for c in categories}
+    fn = {c: 0 for c in categories}
+    correct = 0
+    for g, p in zip(gold_labels, pred_labels):
+        if g == p:
+            correct += 1
+            tp[g] += 1
+        else:
+            fp[p] += 1
+            fn[g] += 1
+
+    precisions, recalls, f1s = [], [], []
+    for c in categories:
+        p = tp[c] / (tp[c] + fp[c]) if (tp[c] + fp[c]) else 0.0
+        r = tp[c] / (tp[c] + fn[c]) if (tp[c] + fn[c]) else 0.0
+        f1 = 2 * p * r / (p + r) if (p + r) else 0.0
+        precisions.append(p)
+        recalls.append(r)
+        f1s.append(f1)
+
+    n = len(rows)
+    n_classes = len(categories) or 1
+    return {
+        "n": n,
+        "accuracy": correct / n if n else 0.0,
+        "macro_precision": sum(precisions) / n_classes,
+        "macro_recall": sum(recalls) / n_classes,
+        "macro_f1": sum(f1s) / n_classes,
+    }
 
 
 def _multilabel_prf(rows, predictions):
@@ -216,6 +276,80 @@ def _ordinal_classification_metrics(rows, predictions, key, categories):
     }
 
 
+def _similarity_ordinal_metrics(rows, predictions):
+    """Same accuracy/macro-PRF/quadratic-weighted-kappa shape as
+    _ordinal_classification_metrics, for BIOSSES' similarity_classification
+    task. Not reusing that function directly: its numeric-fallback bucketing
+    (a model hallucinating a raw score instead of a category name) snaps
+    onto _STS_ANCHOR_CATEGORY's 11-point clinical-STS half-scale, which
+    would mis-bucket a raw 0-4 BIOSSES number -- this uses
+    multitask.builders.simple_tasks._bucket_biosses's own normalized
+    (raw/4.0) cutoffs instead."""
+    categories = _SIMILARITY_CATEGORIES
+    index_of = {c: i for i, c in enumerate(categories)}
+    mid = categories[len(categories) // 2]
+
+    def _bucket(raw_score):
+        norm = raw_score / 4.0
+        if norm < 0.2:
+            return "very_weak"
+        if norm < 0.4:
+            return "weak"
+        if norm < 0.6:
+            return "moderate"
+        if norm < 0.8:
+            return "strong"
+        return "very_strong"
+
+    def to_index(raw):
+        norm = _norm(raw)
+        if norm in index_of:
+            return index_of[norm]
+        try:
+            value = float(norm)
+        except (TypeError, ValueError):
+            return index_of[mid]
+        return index_of[_bucket(value)]
+
+    n_classes = len(categories)
+    tp = [0] * n_classes
+    fp = [0] * n_classes
+    fn = [0] * n_classes
+    gold_idx, pred_idx = [], []
+    correct = 0
+    for doc_id, _, gold in rows:
+        pred = parse_completion(predictions.get(doc_id))
+        g_idx = to_index(gold.get("category"))
+        p_idx = to_index(pred.get("category"))
+        gold_idx.append(g_idx)
+        pred_idx.append(p_idx)
+        if g_idx == p_idx:
+            correct += 1
+            tp[g_idx] += 1
+        else:
+            fp[p_idx] += 1
+            fn[g_idx] += 1
+
+    n = len(rows)
+    precisions, recalls, f1s = [], [], []
+    for i in range(n_classes):
+        p = tp[i] / (tp[i] + fp[i]) if (tp[i] + fp[i]) else 0.0
+        r = tp[i] / (tp[i] + fn[i]) if (tp[i] + fn[i]) else 0.0
+        f1 = 2 * p * r / (p + r) if (p + r) else 0.0
+        precisions.append(p)
+        recalls.append(r)
+        f1s.append(f1)
+
+    return {
+        "n": n,
+        "accuracy": correct / n if n else 0.0,
+        "macro_precision": sum(precisions) / n_classes,
+        "macro_recall": sum(recalls) / n_classes,
+        "macro_f1": sum(f1s) / n_classes,
+        "quadratic_weighted_kappa": _quadratic_weighted_kappa(gold_idx, pred_idx, n_classes),
+    }
+
+
 def score_dataset(name, predictions):
     """name: one of the dataset names in DATASETS' values (e.g. "MedNLI").
     predictions: {id: raw completion string}. Returns a metrics dict."""
@@ -224,7 +358,7 @@ def score_dataset(name, predictions):
         return {"n": 0}
     task = rows[0][1]
     if task in ("nli",):
-        return _accuracy(rows, predictions, "label")
+        return _categorical_prf(rows, predictions, "label")
     if task in ("mcqa", "mcqa_explain"):
         return _accuracy(rows, predictions, "answer")
     if task == "qa_yesnomaybe":
@@ -235,6 +369,8 @@ def score_dataset(name, predictions):
         return _accuracy(rows, predictions, "expansion")
     if task == "sts_classification":
         return _ordinal_classification_metrics(rows, predictions, "category", _STS_CATEGORIES)
+    if task == "similarity_classification":
+        return _similarity_ordinal_metrics(rows, predictions)
     raise ValueError(f"no scorer wired up for task {task!r}")
 
 

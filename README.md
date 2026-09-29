@@ -922,3 +922,38 @@ By comparison, `cohort_eligibility` (2018_n2c2_track1) was deliberately split pe
 `ner_re_medication` and `medication_event` now have Tier A subtask-enrichment datasets available (see [Tier A subtask-enrichment datasets](#tier-a-subtask-enrichment-datasets-train-only-additive) above) as an opt-in additive lever for this. `ner_re_medication` additionally has a [paragraph-window dataset](#paragraph-window-datasets-hf-only-additive-not-scored-by-the-doc-level-pipeline) that adds genuinely new (not relabeled) training text spans. `concept_assertion_relation` now has the same pair of levers -- Tier A subtasks plus a section-window dataset (boundaries are ALL-CAPS section headers rather than blank lines, since this format has none).
 
 <!-- END: multitask dataset stats -->
+
+## SFT chat-template token lengths (loop_transformer training mix)
+
+Separate from the `tiktoken`/Qwen3-4B stats above, this measures the actual
+sequence length the `loop_transformer` SFT recipes see: each model family's own
+`apply_chat_template` (prompt + response, `add_generation_prompt=False`, i.e. the
+same thing the SFT trainer trains on) applied to the 12-task training mix used by
+those recipes (`alignment-handbook/recipes/loop_transformer/**/ouro/*.yaml`), via
+`alignment-handbook/scripts/analyze_token_lengths.py`.
+
+Training mix (base subdirs unless noted; concatenated per split, no subsampling):
+`2018_n2c2_track1`, `2018_n2c2_track2`, `2018_n2c2_track2_paragraph`,
+`2019_n2c2_track1_cls`, `2019_n2c2_track2`, `2022n2c2_track1`,
+`2022n2c2_track2_mimic`, `2022n2c2_track2_uw`, `MedNLI`, `MedQA-USMLE-US`,
+`umn_abbreviation`, and `2010_i2b2_va_md` (the `_md` variant). Train: 51,889
+examples; dev: 8,500 examples.
+
+Measured locally with `Qwen/Qwen3-0.6B` (same tokenizer/vocab as the `Qwen3-8B`
+recipes actually use) and `sapientinc/HRM-Text-1B`; Ouro not measured (no local
+checkpoint/tokenizer available for this run).
+
+| family | split | n | min | mean | p50 | p95 | p99 | max | % > 4096 | % > 8192 | % > 16384 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Qwen3 | train | 51,889 | 129 | 650.4 | 245 | 3646 | 7706 | 21,232 | 4.53% | 0.79% | 0.01% |
+| Qwen3 | dev | 8,500 | 130 | 619.6 | 242 | 3345 | 7725 | 15,371 | 3.99% | 0.84% | -- |
+| Qwen3 | combined | 60,389 | 129 | 646.1 | 245 | 3598 | 7709 | 21,232 | 4.45% | 0.80% | 0.01% |
+| HRM-Text | train | 51,889 | 129 | 687.1 | 255 | 3870 | 8047 | 22,172 | 4.68% | 0.92% | 0.03% |
+| HRM-Text | dev | 8,500 | 130 | 654.2 | 251 | 3531 | 8233 | 16,107 | 4.24% | 1.05% | -- |
+| HRM-Text | combined | 60,389 | 129 | 682.5 | 254 | 3824 | 8052 | 22,172 | 4.62% | 0.94% | 0.03% |
+
+Qwen3 and HRM-Text track closely (as expected -- both are BPE tokenizers over a
+similar effective vocabulary for this text). Overall max across measured families
+is 22,172 tokens (HRM-Text, train). Roughly 4.5-4.7% of examples exceed 4096 tokens
+and under 1% exceed 8192, so `max_seq_length: 8192` truncates well under 1% of
+training examples for this mix; `max_seq_length: 4096` would truncate ~4.5%.

@@ -134,14 +134,19 @@ def build_ner_re_medication_re_only(split):
 
 
 def _iter_paragraphs(doc_text, doc):
-    """Yields (para_text, para_doc) for every non-empty paragraph in
-    doc_text -- see multitask/chunk_utils.py. Paragraphs with no entities
-    (headers, blank fields) are skipped -- no training signal."""
+    """Yields (start, end, para_text, para_doc) for every non-empty
+    paragraph in doc_text -- see multitask/chunk_utils.py. Paragraphs with
+    no entities (headers, blank fields) are skipped -- no training signal.
+    (start, end) are exposed alongside para_text/para_doc so
+    convert_back/ner_re_2018_t2.py's paragraph-prediction merge (the
+    inference-time reassembly step) can recover each surviving paragraph's
+    offset in the whole document without reimplementing this same filter
+    -- see that module's _paragraph_items_by_doc."""
     for start, end in paragraph_spans(doc_text):
         para_doc = project_doc_onto_span(doc, start, end)
         if not para_doc.entities:
             continue
-        yield doc_text[start:end], para_doc
+        yield start, end, doc_text[start:end], para_doc
 
 
 def build_ner_re_medication_paragraph(split):
@@ -152,7 +157,7 @@ def build_ner_re_medication_paragraph(split):
     into the doc-level authoritative eval pipeline); drops the ~0.24% of
     relations that straddle two paragraphs."""
     for txt_path, doc_text, doc in _iter_docs(split):
-        for i, (para_text, para_doc) in enumerate(_iter_paragraphs(doc_text, doc)):
+        for i, (_start, _end, para_text, para_doc) in enumerate(_iter_paragraphs(doc_text, doc)):
             target = _build_ner_re_target(para_doc)
             yield example(
                 "ner_re_medication_paragraph", "2018_n2c2_track2_paragraph", split,
