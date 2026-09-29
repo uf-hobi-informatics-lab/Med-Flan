@@ -23,7 +23,7 @@ import numpy as np
 import tiktoken
 from datasets import load_from_disk
 
-from multitask.schemas import PARAGRAPH_OF, SUBTASK_OF, TASKS
+from multitask.schemas import PARAGRAPH_OF, SEQ2SEQ_OF, SUBTASK_OF, TASKS
 
 warnings.filterwarnings("ignore")
 
@@ -230,6 +230,31 @@ def build_generated_block(report):
         lines.append(f"- Paragraph-window views of `{parent}`:")
         for name, task in dataset_task.items():
             if PARAGRAPH_OF.get(task) == parent:
+                d = report["datasets"][name]
+                n_train = (d["splits"].get("train") or {}).get("n", "?")
+                n_test = (d["splits"].get("test") or {}).get("n", "?")
+                lines.append(f"  - `{name}` (`{task}`): {n_train} train / {n_test} test examples")
+    lines.append("")
+
+    lines.append(
+        "### Seq2seq-target datasets (HF-only, additive, own grammar/scorer)"
+    )
+    lines.append("")
+    lines.append(
+        "A third distinct mechanism: same underlying gold annotations as the "
+        "parent task, but serialized as a compact non-JSON tag/text sequence "
+        "(the Microsoft-Nuance-style grammar in `multitask/seq2seq_grammar.py`) "
+        "instead of that task's JSON target -- neither relabeled text (Tier A) "
+        "nor new text spans (paragraph-window). Own task tag, own "
+        "`run_eval.py` dispatch branch (`multitask/convert_back/`), own "
+        "`DEFAULT_MAX_TOKENS` entry -- the parent task's own JSON-based "
+        "dataset and pipeline are untouched by this:"
+    )
+    lines.append("")
+    for parent in sorted({p for p in SEQ2SEQ_OF.values()}):
+        lines.append(f"- Seq2seq-target views of `{parent}`:")
+        for name, task in dataset_task.items():
+            if SEQ2SEQ_OF.get(task) == parent:
                 d = report["datasets"][name]
                 n_train = (d["splits"].get("train") or {}).get("n", "?")
                 n_test = (d["splits"].get("test") or {}).get("n", "?")

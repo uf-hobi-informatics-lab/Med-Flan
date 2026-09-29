@@ -37,6 +37,9 @@ from multitask.builders.ner_re_2018_t2 import (
     build_ner_re_medication_re_only,
 )
 from multitask.builders.sdoh_2022_t2 import build_sdoh_event
+from multitask.builders.sdoh_2022_t2_seq2seq import (
+    build_sdoh_event_seq2seq, build_sdoh_event_seq2seq_curriculum, build_sdoh_event_seq2seq_true_negative,
+)
 from multitask.builders.simple_tasks import (
     build_biosses, build_bionli, build_discharge_me, build_litcovid, build_medmcqa, build_medqa,
     build_mednli, build_mmlu_pro_health, build_nli4ct, build_pubmedqa, build_umn_abbreviation,
@@ -103,6 +106,17 @@ REGISTRY = [
     ("2022n2c2_track1_paragraph", build_medication_event_paragraph, ["train", "dev", "test"]),
     ("2022n2c2_track2_mimic", lambda s: build_sdoh_event("mimic", s), ["train", "dev", "test"]),
     ("2022n2c2_track2_uw", lambda s: build_sdoh_event("uw", s), ["train", "dev", "test"]),
+    # Microsoft-Nuance-style seq2seq target format for sdoh_event (task tag
+    # sdoh_event_seq2seq, see multitask/seq2seq_grammar.py) -- brand-new,
+    # additive alongside the JSON-based rows above, never merged with them.
+    # Train-only augmentation variants (_trueneg/_curriculum) follow the
+    # same HF-only/train-only convention as the Tier A datasets above.
+    ("2022n2c2_track2_mimic_seq2seq", lambda s: build_sdoh_event_seq2seq("mimic", s), ["train", "dev", "test"]),
+    ("2022n2c2_track2_uw_seq2seq", lambda s: build_sdoh_event_seq2seq("uw", s), ["train", "dev", "test"]),
+    ("2022n2c2_track2_mimic_seq2seq_trueneg", lambda s: build_sdoh_event_seq2seq_true_negative("mimic", s), ["train"]),
+    ("2022n2c2_track2_uw_seq2seq_trueneg", lambda s: build_sdoh_event_seq2seq_true_negative("uw", s), ["train"]),
+    ("2022n2c2_track2_mimic_seq2seq_curriculum", lambda s: build_sdoh_event_seq2seq_curriculum("mimic", s), ["train"]),
+    ("2022n2c2_track2_uw_seq2seq_curriculum", lambda s: build_sdoh_event_seq2seq_curriculum("uw", s), ["train"]),
     ("semeval_2015", build_disorder_normalization, ["train", "test"]),
     ("umn_abbreviation", build_umn_abbreviation, ["train", "dev", "test"]),
     ("2010_i2b2_va", build_concept_assertion_relation, ["train", "test"]),
@@ -122,7 +136,7 @@ REGISTRY = [
 ]
 
 
-def _build_split(gen, split, messages_key="messages"):
+def _build_split(examples, messages_key="messages"):
     rows = [
         {
             "messages": ex[messages_key],
@@ -131,15 +145,15 @@ def _build_split(gen, split, messages_key="messages"):
             "dataset": ex["dataset"],
             "id": ex["id"],
         }
-        for ex in gen(split)
+        for ex in examples
     ]
     return Dataset.from_list(rows) if rows else None
 
 
-def _build_and_save(name, gen, splits, messages_key):
+def _build_and_save(name, examples_by_split, splits, messages_key):
     split_datasets = {}
     for split in splits:
-        ds = _build_split(gen, split, messages_key)
+        ds = _build_split(examples_by_split[split], messages_key)
         if ds is not None and len(ds) > 0:
             split_datasets[split] = ds
     # No released dev split -- carve a monitoring-only dev sample out of
@@ -162,8 +176,13 @@ def _build_and_save(name, gen, splits, messages_key):
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for name, gen, splits in REGISTRY:
-        _build_and_save(name, gen, splits, "messages")
-        _build_and_save(f"{name}_md", gen, splits, "messages_md")
+        # gen(split) does the actual BRAT/XML/TSV parsing+alignment work;
+        # schemas.example() already populates both "messages" and
+        # "messages_md" in one pass, so materializing each split once and
+        # reusing it for both variants below avoids re-running that work twice.
+        examples_by_split = {split: list(gen(split)) for split in splits}
+        _build_and_save(name, examples_by_split, splits, "messages")
+        _build_and_save(f"{name}_md", examples_by_split, splits, "messages_md")
 
 
 if __name__ == "__main__":

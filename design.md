@@ -826,3 +826,93 @@ buildable; deciding between them still requires the same held-out
 full-task F1 comparison this section always called for, just with one more
 arm.
 
+## Future plan: additive bare-label variants for single-field classification tasks
+
+**Not yet implemented.** Captured here as a design for later, per owner
+instruction that this must be built additively -- new task tags/datasets/
+functions alongside the existing ones, with zero edits to the existing 5
+tasks or any code path they run through.
+
+**Problem statement.** Five tasks are pure single-field classification, but
+their training target is still rendered as a full JSON object via
+`schemas.py`'s `_target_str()`, same as every IE task: `nli` -> `{"label":
+...}`, `mcqa` -> `{"answer": ...}`, `cohort_eligibility` -> `{"label":
+...}`, `sts_classification` -> `{"category": ...}`,
+`abbreviation_disambiguation` -> `{"expansion": ...}`. Four of the five have
+a closed label vocabulary (`target_schema.py` `Enum` specs);
+`abbreviation_disambiguation` is free text. Almost the whole JSON completion
+(`{`, the key name, `:`, `}`) is boilerplate the model predicts with
+near-zero loss almost immediately, diluting the training signal that lives
+in the 1-2 tokens carrying the actual label -- and skewing any loss-based
+comparison across the task mix (a JSON classification task's average
+per-token loss looks artificially lower than a bare-label task's even when
+neither has actually learned the label distribution any better).
+
+**Constraint.** Additive-only: the existing 5 tasks and every function they
+run through (`schemas.py`'s `render`/`render_messages`/`render_md`/
+`render_messages_md`/`_target_str`/`example()`,
+`vllm_structured_infer.py`'s `_make_sampling_params`,
+`multitask/eval/simple_tasks.py`, and `run_eval.py`/`run_eval_csv.py`'s
+cohort-eligibility routing) must stay byte-for-byte unchanged. `example()`
+renders internally and does not return the raw `(input_text, target)` pair,
+so a new task tag needs its own call site with that raw pair in hand, not a
+way to re-tag an already-built example after the fact.
+
+**Proposed design.**
+- New task tags, added as new `TASKS` entries in `schemas.py` (existing
+  entries untouched): `nli_plain`, `mcqa_plain`, `cohort_eligibility_plain`,
+  `sts_classification_plain`, `abbreviation_disambiguation_plain` -- same
+  `category` as their originals, `instruction` text rewritten to describe a
+  bare-label output ("Output exactly one of: entailment, contradiction,
+  neutral. No JSON, no extra text.") instead of `Return JSON {"label":
+  ...}`.
+- A new, fully separate render path in `schemas.py`, so none of the
+  existing render functions are touched: `PLAIN_LABEL_TASKS = {task: key}`
+  map, `_plain_target_str(task, target) = str(target[PLAIN_LABEL_TASKS[task]])`,
+  `render_plain`/`render_messages_plain`/`render_md_plain`/
+  `render_messages_md_plain` (mirror the existing four, call
+  `_plain_target_str` instead of `_target_str`), and `example_plain()`
+  (mirrors `example()`, calls the `_plain` render functions).
+- New sibling builder functions -- same pattern this repo already uses for
+  the Tier A subtask builders, which sit additively next to their parents
+  without modifying them: `build_mednli_plain`/`build_medqa_plain`/
+  `build_umn_abbreviation_plain` in `multitask/builders/simple_tasks.py`,
+  `build_cohort_eligibility_plain` in
+  `multitask/builders/cohort_eligibility_2018_t1.py`,
+  `build_sts_classification_plain` in `multitask/builders/sts_2019_t1.py`.
+  Each duplicates its original's raw-record iteration but calls
+  `example_plain(new_task, new_dataset, ...)`, producing a new dataset dir:
+  `MedNLI_plain`, `MedQA-USMLE-US_plain`, `umn_abbreviation_plain`,
+  `2018_n2c2_track1_plain`, `2019_n2c2_track1_cls_plain` (plus `_md`
+  variants via the existing generic HF-build machinery once registered).
+- Inference-time decoding: one new conditional branch in
+  `vllm_structured_infer.py`'s `_make_sampling_params` -- the one
+  unavoidable touch to an existing function, since it's the single dispatch
+  point for every task's sampling params; existing branches/behavior for
+  every current task tag stay byte-identical. For the 4 closed-vocab
+  `_plain` tasks, use vLLM's `choice` grammar (a real field on the
+  installed `GuidedDecodingParams`, confirmed via static AST inspection of
+  `sampling_params.py` in the project venv -- `import vllm` itself is
+  broken in this sandbox, so this needs a real smoke test on the training
+  host before relying on it, same as this module's other version-guarded
+  structured-output code), sourcing the literal values from
+  `target_schema.SPECS[task].keys[key].values` so nothing is hand-copied a
+  third time. `abbreviation_disambiguation_plain` (free text, no enum) gets
+  unconstrained generation, same treatment as `PLAIN_TEXT_TASKS`.
+- New eval module `multitask/eval/plain_label_tasks.py` (mirrors
+  `simple_tasks.py`'s shape, much simpler with no JSON to parse -- gold and
+  prediction are both just the stripped raw string). New
+  `_run_cohort_eligibility_plain` (`run_eval.py`) and
+  `_score_cohort_eligibility_plain` (`run_eval_csv.py`) functions build
+  `{"label": raw.strip()}` from the bare completion and hand it to the
+  **existing, unmodified** `cohort_eligibility_2018_t1.write_xmls`, which
+  already just does `target.get("label")`.
+
+**Status.** Not yet built. A follow-up decision once this exists will be
+whether/how to swap a `_plain` variant into `build_med_flan_mix.py`/
+`build_sft_curriculum.py`'s dataset lists in place of (or alongside) the
+JSON original for a real training run, and whether the resulting held-out
+accuracy/F1 (not just training-loss shape) actually improves -- the same
+kind of held-out comparison "the ablation" above always calls for, not
+something to assume from the training-signal argument alone.
+

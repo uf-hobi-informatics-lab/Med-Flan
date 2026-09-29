@@ -361,6 +361,73 @@ TASKS = {
             '"attributes": [{"role", "name", "value"}, ...]}, ...]}`.'
         ),
     },
+    # Additive sibling to sdoh_event: same underlying SHAC events, same
+    # closed vocabularies, but a compact non-JSON structured-sequence
+    # target instead of JSON, matching the Microsoft-Nuance T5 approach's
+    # #1-ranked 2022 n2c2 Track 2 submission (see
+    # multitask/seq2seq_grammar.py). Never touches sdoh_event's own task
+    # entry, builder, or convert_back module.
+    "sdoh_event_seq2seq": {
+        "category": "information_extraction",
+        "display": "SDoH_Seq2Seq",
+        "instruction": (
+            "### Task\n"
+            "Extract social-determinants-of-health (SDOH) events from "
+            "this note, per the SHAC annotation schema (Lybarger et "
+            "al., 2022 n2c2 Track 2). An SDOH event is a trigger span "
+            "(Employment, LivingStatus, Tobacco, Alcohol, or Drug) plus "
+            "role-labeled argument spans.\n\n"
+            "### Roles By Trigger Type\n"
+            "- **Employment**: Status, Type (occupation), Duration, "
+            "History\n"
+            "- **LivingStatus**: Status, Type (alone/with_family/"
+            "with_others/homeless), Duration, History\n"
+            '- **Tobacco/Alcohol/Drug**: Status, Type (the specific '
+            'substance, e.g. "beer"/"wine" for Alcohol, "cocaine"/'
+            '"marijuana" for Drug, "cigarettes" for Tobacco), Amount, '
+            'Frequency, Method (how it\'s consumed, e.g. "smoke"/'
+            '"inject" -- mostly Drug-only; almost never annotated for '
+            "Alcohol and rare for Tobacco, since smoking is the assumed "
+            "default for both), Duration, History -- Drug covers "
+            "illicit drugs/marijuana/prescription misuse only (not "
+            "medical use), Tobacco covers first-hand smoking only\n\n"
+            "### Status Values\n"
+            "Status is one of none/current/past/future for every "
+            'trigger type (some values are rare for a given type -- '
+            'e.g. "future" is rare for Tobacco/Alcohol/Drug, "none" is '
+            "rare for LivingStatus -- but none is impossible for any of "
+            "them).\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in this format (no example "
+            "here is exhaustive -- copy trigger/filler text verbatim "
+            "from the note; if there are no SDOH events, return an "
+            "empty string):\n"
+            "`<EventType> trigger_text <RoleName>[!FillerType] "
+            "[attr_value] filler_text ...`, one such clause per role, "
+            "roles in the fixed order Status, Type, Type2, Type3, "
+            "Amount, Amount2, Amount3, Duration, Duration2, Frequency, "
+            "Frequency2, History, History2, Method, Method2, Method3 "
+            "(numbered suffixes are extra fillers for the same role); "
+            'multiple events are joined with " {AND} ". "[attr_value]" '
+            "only ever follows a Status or Type role, and is one of "
+            "StatusTimeVal's none/current/past/future, StatusEmployVal's "
+            "employed/unemployed/retired/on_disability/student/"
+            "homemaker, or TypeLivingVal's alone/with_family/"
+            "with_others/homeless -- whichever the role's own filler "
+            "type implies. Use the literal token \"=TRIGGER=\" in place "
+            "of filler_text when a role's filler is the exact same span "
+            "as its own event's trigger, instead of repeating the text. "
+            "\"!FillerType\" is only needed when a role's filler type "
+            "isn't the default for that role (Status defaults to "
+            "StatusTime, or StatusEmploy for Employment; Type defaults "
+            "to Type, or TypeLiving for LivingStatus; every other role "
+            "defaults to its own base name) -- omit it otherwise.\n"
+            "Example: `<LivingStatus> lives <Status> [current] "
+            "=TRIGGER= <Type> [with_family] with husband {AND} "
+            "<Tobacco> smokes <Status> [current] =TRIGGER= <Type> "
+            "cigarettes <Type2> cigars`"
+        ),
+    },
     "family_history": {
         "category": "information_extraction",
         "display": "Family_History",
@@ -824,8 +891,20 @@ def cohort_criterion_prompt(criterion: str) -> str:
     return f"Criterion: {criterion}\nDefinition: {definition}{note}"
 
 # Tasks whose target is scored as free text (ROUGE/BERTScore-style), so
-# JSON-wrapping the target would only hurt the official metric.
-PLAIN_TEXT_TASKS = {"summarization"}
+# JSON-wrapping the target would only hurt the official metric. Also home
+# to sdoh_event_seq2seq's non-JSON structured-sequence target (see
+# multitask/seq2seq_grammar.py) -- same mechanism build_discharge_me
+# already relies on for "summarization", just a different plain-text
+# shape, not free prose.
+PLAIN_TEXT_TASKS = {"summarization", "sdoh_event_seq2seq"}
+
+# sdoh_event_seq2seq task-tag -> parent end-to-end task-tag it re-frames
+# the same underlying events into a different target serialization for
+# (see multitask/seq2seq_grammar.py). Kept separate from SUBTASK_OF/
+# PARAGRAPH_OF -- a distinct mechanism from either (same text AND same
+# labels as the parent, just a different output grammar) -- so
+# hf_dataset_stats.py can report it under its own heading.
+SEQ2SEQ_OF = {"sdoh_event_seq2seq": "sdoh_event"}
 
 
 def _check_task(task: str) -> None:

@@ -44,7 +44,8 @@ def build(names, out_path: Path):
         tr = d["train"].shuffle(seed=SEED)
         tr = tr.select(range(min(CAP, len(tr))))
         train_parts.append(tr)
-        dev_parts.append(d["dev"])
+        if "dev" in d:
+            dev_parts.append(d["dev"])
 
     out = DatasetDict(
         {

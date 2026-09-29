@@ -78,6 +78,22 @@ def _run_brat(dataset, completions, module):
             module._run_eval(gold_dir, out_dir)
 
 
+def _run_brat_seq2seq(dataset, completions, module):
+    """Parallel to `_run_brat`, for the seq2seq grammar path
+    (multitask/seq2seq_grammar.py): completions are raw generated strings,
+    never JSON, so this skips `_parsed_target`'s JSON-parse entirely."""
+    from multitask.io_utils import read_text
+
+    gold_dir = module.GOLD_DIR_BY_DATASET[dataset]
+    predictions = [
+        (doc_id, completion, read_text(gold_dir / f"{doc_id}.txt"))
+        for doc_id, completion in completions.items()
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = module.write_anns(predictions, tmp)
+        module.score_dirs(gold_dir, out_dir)
+
+
 def _run_cohort_eligibility(completions):
     from multitask.convert_back import cohort_eligibility_2018_t1 as m
 
@@ -139,6 +155,9 @@ def run_eval(dataset, completions):
     if task == "sdoh_event":
         from multitask.convert_back import sdoh_2022_t2 as m
         return _run_brat(dataset, completions, m)
+    if task == "sdoh_event_seq2seq":
+        from multitask.convert_back import sdoh_2022_t2_seq2seq as m
+        return _run_brat_seq2seq(dataset, completions, m)
     if task == "cohort_eligibility":
         return _run_cohort_eligibility(completions)
     if task == "family_history":
@@ -239,6 +258,13 @@ def _self_check_all():
 
     print("\n=== 2022n2c2_track2_uw relations (derived, auxiliary) ===")
     sdoh_2022_t2._self_check_relations()
+
+    from multitask.convert_back import sdoh_2022_t2_seq2seq
+
+    for source, dataset in (("mimic", "2022n2c2_track2_mimic_seq2seq"), ("uw", "2022n2c2_track2_uw_seq2seq")):
+        print(f"\n=== {dataset} ===")
+        completions = {ex["id"]: ex["target"] for ex in sdoh_2022_t2_seq2seq._examples_with_raw_target(source, "test")}
+        run_eval(dataset, completions)
 
     print("\n=== 2018_n2c2_track1 ===")
     run_eval("2018_n2c2_track1", dict(cohort_eligibility_2018_t1._examples_with_raw_target("test")))

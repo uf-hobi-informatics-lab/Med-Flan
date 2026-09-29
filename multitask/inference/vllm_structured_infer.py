@@ -110,6 +110,11 @@ DEFAULT_MAX_TOKENS = {
     "medication_event": 12800,             # p95 1523, max 1675
     "family_history": 12800,
     "sdoh_event": 12800,
+    # Microsoft-Nuance-style seq2seq target (multitask/seq2seq_grammar.py) --
+    # much more compact than sdoh_event's JSON target for the same events;
+    # measured test+dev+train gold-target lengths (tiktoken cl100k):
+    # p95=181, max=372.
+    "sdoh_event_seq2seq": 1024,
 }
 _DEFAULT_MAX_TOKENS = 12800
 
@@ -121,13 +126,15 @@ _BAD_STATUSES = ("surrogate", "bad_json", "violations", "repetitive")
 
 def _load_examples(dataset, limit=None):
     if isinstance(dataset, str):
-        if not Path(dataset).exists():
-            raise SystemExit(f"no eval file at {dataset} -- see {EVAL_DIR} for valid dataset names")
-        examples = datasets.load_dataset("json", data_files=dataset)["test"]
+        eval_path = EVAL_DIR / f"{dataset}.jsonl"
+        path = eval_path if eval_path.exists() else Path(dataset)
+        if not path.exists():
+            raise SystemExit(f"no eval file at {path} -- see {EVAL_DIR} for valid dataset names")
+        examples = datasets.load_dataset("json", data_files=str(path))["train"]
     else:
         examples = dataset
 
-    if limit:
+    if limit is not None:
         examples = examples.select(range(limit))
     return examples
 
@@ -197,7 +204,12 @@ def _looks_repetitive(value):
     gold test-split targets before shipping (false-positive rate, i.e. how
     often *correct* gold gets flagged): ner_re_medication 2.0%, discharge-me
     0.2%, medication_event/sdoh_event/concept_assertion_relation/
-    disorder_normalization/family_history 0.0%. A false positive here only
+    disorder_normalization/family_history/sdoh_event_seq2seq 0.0% (measured
+    on sdoh_event_seq2seq's own test-split gold targets, mimic+uw combined,
+    n=891 -- its `{AND}`-joined, tag-heavy shape has few sentence boundaries
+    per target, but that just means most targets collapse to one segment
+    under _SENTENCE_SPLIT rather than triggering a false flag). A false
+    positive here only
     costs a wasted retry (at temperature=0 it reproduces the same content
     and falls through unchanged) -- not a corrupted result -- so a small
     nonzero rate is an acceptable, measured tradeoff, not a silent risk."""
@@ -533,8 +545,7 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
         "truncated"}; value is the parsed dict / raw text accordingly (a
         tuple alongside extra info for "violations"/"repetitive")."""
         text = out.outputs[0].text
-        if out.outputs[0].finish_reason == "length":
-            return "truncated", text
+        truncated = out.outputs[0].finish_reason == "length"
         clean, had_surr = _strip_lone_surrogates(text)
         if had_surr:
             return "surrogate", clean
@@ -546,7 +557,12 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
         try:
             parsed = json.loads(clean)
         except json.JSONDecodeError:
-            return "bad_json", clean
+            # A completion that hit max_tokens is expected to be unparseable
+            # (truncated mid-object); one that didn't but still fails to
+            # parse is a genuine grammar/decoding defect -- both are left as
+            # raw text either way, but only the truncated case is exempted
+            # from retry (see _BAD_STATUSES).
+            return ("truncated" if truncated else "bad_json"), clean
         vs = validate(ex["task"], parsed)
         if vs:
             return "violations", (parsed, vs)

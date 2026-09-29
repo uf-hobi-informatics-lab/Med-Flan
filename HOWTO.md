@@ -243,18 +243,16 @@ compute. Whenever `retries > 0` (the default is `2`) and the main pass is
 greedy, set `--retry-temperature 0.2`–`0.4` so a re-draw is actually a
 different sample.
 
-**`repetition_penalty` / `frequency_penalty`** — per-dataset in
-`GEN_OVERRIDES`/`DEFAULT_GEN` (`run_generation.py`), or via
-`--sampling-kwarg` for a one-off override. **`frequency_penalty` was
-deliberately removed from this repo's defaults** — confirmed via a
-side-by-side run to corrupt ~21% of extracted IE span text with a spurious
-leading `"-"` character not present in the source document (see the comment
-above `DEFAULT_GEN` in `run_generation.py`); removing it took
-`2022n2c2_track2_mimic/uw`'s Combined F1 from ~0.50 to ~0.78. Don't
-re-introduce it on the IE tasks without re-measuring. `repetition_penalty`
-(currently `1.05` everywhere) is safer to nudge — try `1.0` (off) first if
-you suspect it's suppressing recall on a specific task, `1.1`–`1.15` if a
-model is looping/repeating.
+**`repetition_penalty` / `frequency_penalty`** — `frequency_penalty` is off
+(`0.0`) in `GEN_OVERRIDES`/`DEFAULT_GEN` (`run_generation.py`) as of the
+current defaults: confirmed via a side-by-side run to corrupt extracted IE
+span text with a spurious leading `-` character not present in the source
+document, costing `2022n2c2_track2_mimic/uw`'s Combined F1 (~0.50 -> ~0.78
+when removed). `repetition_penalty` is **still on** (`1.05`, not removed) —
+it was tested removed at the same time as `frequency_penalty` but never
+independently re-confirmed as also contributing to the corruption, so it's
+left in place; override via `--sampling-kwarg repetition_penalty=1.0` for a
+one-off experiment, and revisit the default if a future run isolates it.
 
 **`max_tokens`** — a *correctness* parameter under grammar-constrained
 decoding, not just a cost knob: hitting the cap mid-object leaves the JSON
