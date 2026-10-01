@@ -95,7 +95,8 @@ def build(names, out_path: Path):
     return out
 
 
-def verify(stage_name: str, out_path: Path, expected_tags: set, min_tier2_share: float | None):
+def verify(stage_name: str, out_path: Path, expected_tags: set, min_tier2_share: float | None,
+           task_tag_of_dir: dict):
     dd = load_from_disk(str(out_path))
     assert set(dd.keys()) == {"train", "dev"}, f"{stage_name}: unexpected splits {list(dd.keys())}"
 
@@ -125,7 +126,7 @@ def verify(stage_name: str, out_path: Path, expected_tags: set, min_tier2_share:
             assert top_share <= 0.5, f"{stage_name}: {top_tag} is {top_share:.1%} of train (>50%)"
 
             if min_tier2_share is not None:
-                tier2_tags = {TASK_TAG_OF_DIR[n] for n in TIER2}
+                tier2_tags = {task_tag_of_dir[n] for n in TIER2}
                 tier2_n = sum(n for tag, n in counts.items() if tag in tier2_tags)
                 tier2_share = tier2_n / total
                 print(f"    tier-2 tasks share: {tier2_share:.1%} of train")
@@ -173,18 +174,17 @@ def main():
     print(f"Building SFT Stage 2 (full end-to-end, combined) -> {stage2_path}")
     build(TIER1 + TIER2, stage2_path)
 
-    global TASK_TAG_OF_DIR
     all_names = TIER1 + TIER2
-    TASK_TAG_OF_DIR = {}
+    task_tag_of_dir = {}
     for name in all_names:
         d = load_from_disk(str(SRC / name))
-        TASK_TAG_OF_DIR[name] = Counter(d["train"]["task"]).most_common(1)[0][0]
+        task_tag_of_dir[name] = Counter(d["train"]["task"]).most_common(1)[0][0]
 
-    stage1_tags = {TASK_TAG_OF_DIR[n] for n in TIER1}
-    stage2_tags = {TASK_TAG_OF_DIR[n] for n in TIER1 + TIER2}
+    stage1_tags = {task_tag_of_dir[n] for n in TIER1}
+    stage2_tags = {task_tag_of_dir[n] for n in TIER1 + TIER2}
 
-    verify("sft_stage1_subtasks", stage1_path, stage1_tags, min_tier2_share=None)
-    verify("sft_stage2_full", stage2_path, stage2_tags, min_tier2_share=0.25)
+    verify("sft_stage1_subtasks", stage1_path, stage1_tags, min_tier2_share=None, task_tag_of_dir=task_tag_of_dir)
+    verify("sft_stage2_full", stage2_path, stage2_tags, min_tier2_share=0.25, task_tag_of_dir=task_tag_of_dir)
 
     print("\nAll checks passed.")
 

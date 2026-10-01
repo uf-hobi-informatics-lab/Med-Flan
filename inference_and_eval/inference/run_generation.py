@@ -27,6 +27,7 @@ below) -- e.g. ".../models/v1_md/ouro_1_4b_std_plw005_1/checkpoint-25860" ->
 checkpoints/models never collide or get overwritten in the same --out-dir.
 """
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -93,7 +94,7 @@ OOD_DATASET_SPECS = [
     ("2010_i2b2_va", "standard", "2010_i2b2_va"),
     ("nli4ct", "standard", "nli4ct"),
     ("MMLU-Pro-Health", "standard", "MMLU-Pro-Health"),
-    ("biosses", "standard", "biosses"),
+    # ("biosses", "standard", "biosses"),
 ]
 
 DATASET_SPECS = MAIN_DATASET_SPECS + OOD_DATASET_SPECS
@@ -135,13 +136,27 @@ def gen_settings(name):
     return GEN_OVERRIDES.get(name, DEFAULT_GEN)
 
 
+def _normalize_vllm_dtype(dtype):
+    """vLLM's LLM(dtype=...) accepts "auto"/"half"/"float16"/"bfloat16"/
+    "float32" but NOT the "bf16"/"fp16"/"fp32" shorthand the HF path and
+    runai DTYPE env var use -- normalize here so a single DTYPE=bf16 from
+    the sweep works for both backends. "auto" (the default) is passed
+    through unchanged (vLLM then derives from the checkpoint's
+    config.json torch_dtype)."""
+    return {
+        "bf16": "bfloat16",
+        "fp16": "float16", "half": "float16",
+        "fp32": "float32",
+    }.get(dtype, dtype)
+
+
 def run_sweep(
     model, backend="xgrammar", root=DEFAULT_ROOT, dataset_specs=None, limit=None,
-    max_model_len=32768, gpu_memory_utilization=0.95, tensor_parallel_size=None,
+    max_model_len=32768, gpu_memory_utilization=0.9, tensor_parallel_size=None,
     retries=2, retry_temperature=None, fallback_model=None, fallback_backend=None,
     fallback_retries=1, out_dir=None, batch_size=None, enable_thinking=False,
     sampling_kwarg_overrides=None, temperature=0.0, top_p=1.0, top_k=-1,
-    enable_prefix_caching=False,
+    enable_prefix_caching=False, markdown=False, dtype="auto", llm_kwarg_overrides=None,
 ):
     dataset_specs = dataset_specs if dataset_specs is not None else DATASET_SPECS
     out_dir = Path(out_dir) if out_dir else None
@@ -161,6 +176,22 @@ def run_sweep(
     }
     if tensor_parallel_size:
         llm_kwargs["tensor_parallel_size"] = tensor_parallel_size
+    # Only force a dtype when explicitly set -- "auto" (the default) lets
+    # vLLM derive from the checkpoint's config.json torch_dtype, the same
+    # behavior as before this flag existed. See _normalize_vllm_dtype for
+    # the bf16/fp16/fp32 shorthand normalization (vLLM rejects "bf16").
+    if dtype != "auto":
+        llm_kwargs["dtype"] = _normalize_vllm_dtype(dtype)
+    # Generic passthrough for any OTHER vllm.LLM constructor arg, applied LAST
+    # so it can override any of the named ones above (e.g. --llm-kwarg
+    # enforce_eager=true to disable CUDA graphs -- a known workaround for
+    # vLLM hangs/stalls on custom trust_remote_code architectures like HRM,
+    # where graph capture may not handle the non-causal PrefixLM attention
+    # correctly; --llm-kwarg max_num_seqs=64 to cap concurrency). Parsed
+    # with the same _parse_sampling_kwargs helper as --sampling-kwarg
+    # (int/float/bool coercion, else raw string).
+    if llm_kwarg_overrides:
+        llm_kwargs.update(llm_kwarg_overrides)
 
     print(f"loading {model!r} (backend={backend!r}, llm_kwargs={llm_kwargs})")
     llm = _make_llm(model, backend, disable_any_whitespace=True, llm_kwargs=llm_kwargs)
@@ -179,10 +210,35 @@ def run_sweep(
         print("=" * 88)
         print(name)
         print("=" * 88)
-        ds = load_from_disk((root / name).as_posix())["test"]
+        # markdown=True loads huggingface_format/<name>_md instead of
+        # <name> -- the same underlying examples, rendered with
+        # schemas.render_messages_md instead of render_messages (see
+        # build_hf_datasets.py, which builds both for every REGISTRY entry).
+        # Output filenames/tags below still use the bare `name`, since gold
+        # answers are identical between the two renderings -- only the
+        # prompt formatting differs, and out_dir already disambiguates
+        # markdown vs non-markdown runs by nesting under MAIN_FOLDER.
+        ds_dir = f"{name}_md" if markdown else name
+        ds = load_from_disk((root / ds_dir).as_posix())["test"]
         gen = gen_settings(name)
         sampling_kwargs = {**gen["sampling_kwargs"], **(sampling_kwarg_overrides or {})}
         out_path = (out_dir / f"{tag}__{name}.json") if out_dir else None
+        # Resume support: if this dataset's completion JSON already exists and
+        # is valid, skip it instead of re-running (potentially long) inference
+        # and overwriting it. Re-running a crashed/preempted job then only
+        # re-pays for the datasets that didn't finish. The validity check
+        # (json.loads, not just .exists()) guards against a non-atomic write
+        # (vllm_structured_infer.run writes via Path.write_text -- no temp +
+        # rename) leaving a 0-byte / truncated file after an OOM/preemption,
+        # which a bare existence check would silently skip forever. Delete the
+        # JSON (or let the next run find it invalid) to force a regenerate.
+        if out_path and out_path.exists():
+            try:
+                json.loads(out_path.read_text(encoding="utf-8"))
+                print(f"[skip] {out_path.name} already exists for {name}; skipping")
+                continue
+            except (OSError, ValueError):
+                print(f"[skip] {out_path.name} exists but is not valid JSON; regenerating")
         try:
             completions = run_inference(
                 ds, model, backend, llm=llm,
@@ -217,7 +273,7 @@ def main():
     )
     parser.add_argument("--limit", type=int, default=None, help="per-dataset example cap, for testing")
     parser.add_argument("--max-model-len", type=int, default=32768)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=0.95)
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
     parser.add_argument(
         "--tensor-parallel-size", type=int, default=None,
         help="shard the model across N GPUs (production B300 supports up to 2; "
@@ -262,6 +318,16 @@ def main():
              "--top-k for those (own flags below), not this.",
     )
     parser.add_argument(
+        "--llm-kwarg", action="append", default=[], metavar="KEY=VALUE",
+        help="override any vllm.LLM constructor arg, applied on top of the named flags above "
+             "(--max-model-len/--gpu-memory-utilization/--dtype/etc.), repeatable. The main use "
+             "case is debugging a stuck vLLM run on a custom trust_remote_code architecture: "
+             "--llm-kwarg enforce_eager=true disables CUDA graph capture (a known workaround "
+             "for vLLM hangs on non-standard attention like HRM's PrefixLM non-causal prompt "
+             "attention), --llm-kwarg max_num_seqs=64 caps concurrency. Same int/float/bool "
+             "parsing as --sampling-kwarg.",
+    )
+    parser.add_argument(
         "--enable-thinking", choices=["auto", "true", "false"], default="false",
         help="Qwen3-style chat-template reasoning toggle. 'false' (default) disables thinking "
              "-- render_messages's own training targets never include a <think> block, so a "
@@ -273,7 +339,23 @@ def main():
              "that doesn't define enable_thinking (e.g. Qwen2.5) -- see vllm_structured_infer.py's "
              "module docstring.",
     )
+    parser.add_argument(
+        "--markdown", action="store_true", default=False,
+        help="load the markdown-rendered '<name>_md' huggingface_format/ variant of every "
+             "dataset instead of the plain '<name>' one -- use this when --model is a checkpoint "
+             "trained on messages_md rendering (e.g. this repo's v1_md/v1_md_upsampled main "
+             "folders and the stage1/stage2 curriculum, which trains exclusively on _md data). "
+             "Evaluating a markdown-trained checkpoint on plain-rendered prompts (or vice versa) "
+             "silently mismatches train/eval formatting.",
+    )
     parser.add_argument("--out-dir", required=True, help="directory to write <model_tag>__<dataset>.json completions into")
+    parser.add_argument(
+        "--dtype", default="auto",
+        help="model load dtype for vLLM. 'auto' (default) lets vLLM derive from the checkpoint's "
+             "config.json (torch_dtype) -- the pre-flag behavior. Pass 'bfloat16'/'bf16', "
+             "'float16'/'fp16'/'half', or 'float32'/'fp32' to force it (shorthand normalized to "
+             "the full name vLLM accepts, since vLLM rejects 'bf16').",
+    )
     args = parser.parse_args()
 
     dataset_specs = None
@@ -293,7 +375,8 @@ def main():
         out_dir=args.out_dir, batch_size=args.batch_size, enable_thinking=enable_thinking,
         sampling_kwarg_overrides=_parse_sampling_kwargs(args.sampling_kwarg),
         temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
-        enable_prefix_caching=args.enable_prefix_caching,
+        enable_prefix_caching=args.enable_prefix_caching, markdown=args.markdown,
+        dtype=args.dtype, llm_kwarg_overrides=_parse_sampling_kwargs(args.llm_kwarg),
     )
 
 

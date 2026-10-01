@@ -138,7 +138,15 @@ def _categorical_prf(rows, predictions, key):
     pred_labels = [_norm(parse_completion(predictions.get(doc_id)).get(key))
                    for doc_id, _, _ in rows]
 
-    categories = sorted(set(gold_labels) | set(pred_labels), key=lambda c: (c is None, c))
+    # None (an unparseable/missing prediction) must never become its own
+    # scored class: it isn't a real label the model could get "right" for
+    # ANY gold example, so folding it into `categories` only inflates
+    # n_classes (deflating every macro average) without adding signal --
+    # same "unparseable is a miss, not a class" contract this module's
+    # other scorers already follow. Excluded from `categories` here, and
+    # from fp's tally below (a None prediction still costs the gold label
+    # its fn, same as it should -- it just isn't itself an eligible fp target).
+    categories = sorted({c for c in set(gold_labels) | set(pred_labels) if c is not None})
     tp = {c: 0 for c in categories}
     fp = {c: 0 for c in categories}
     fn = {c: 0 for c in categories}
@@ -148,8 +156,10 @@ def _categorical_prf(rows, predictions, key):
             correct += 1
             tp[g] += 1
         else:
-            fp[p] += 1
-            fn[g] += 1
+            if g in fn:
+                fn[g] += 1
+            if p in fp:
+                fp[p] += 1
 
     precisions, recalls, f1s = [], [], []
     for c in categories:

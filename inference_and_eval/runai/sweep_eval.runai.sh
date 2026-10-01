@@ -19,6 +19,12 @@
 # own FAMILY detection) is in the given comma-separated list. Omit it to sweep
 # every family, as before.
 #
+# Curriculum variants (variant dir name has a "_stageN_" token, e.g.
+# "qwen_8b_std_stage2_1") are only meaningful to evaluate at their final
+# stage -- stage1 is an intermediate checkpoint always superseded by a
+# stage2 run continuing from it, so this always skips any "stage1" variant
+# (unconditionally, not behind a flag) and only ever sweeps "stage2".
+#
 # Dry run by default (prints what would be submitted, no runai calls) --
 # pass --yes to actually submit. A single main_folder can contain ~20
 # variants x 6 ranks below = 100+ individual GPU jobs, so this is meant to
@@ -28,6 +34,30 @@
 # (see that script's header) -- e.g. to sweep a non-greedy decode instead of
 # the temperature=0.0 default:
 #   TEMPERATURE=0.5 TOP_P=0.95 bash inference_and_eval/runai/sweep_eval.runai.sh v1_md --yes
+#
+# BACKEND_ENGINE (default: vllm) and CONDITION (default: direct) are
+# forwarded the same way -- set BACKEND_ENGINE=hf to run every checkpoint in
+# the sweep through the plain-transformers HF inference path instead of vLLM
+# (built for HRM's trust_remote_code + PrefixLM token_type_ids requirements;
+# see infer_eval_multitask.runai.sh's header). CONDITION defaults to "direct"
+# (the value every HRM checkpoint in this repo is trained with) and only
+# applies to the hf path:
+#   BACKEND_ENGINE=hf bash inference_and_eval/runai/sweep_eval.runai.sh v1_md --families hrm --yes
+#
+# BACKEND_ENGINE=native runs every checkpoint in the sweep through the
+# native (trust_remote_code) inference path -- the Ouro adaptive-early-exit
+# route (vLLM ignores the early_exit_gate). Auto-selected per-job when a
+# variant dir contains "_gated_" (see infer_eval_multitask.runai.sh's header),
+# so a sweep over a main_folder that mixes gated and non-gated Ouro variants
+# routes each correctly without setting this globally. Set it explicitly to
+# force native on a non-_gated_ variant, or vllm to force the full-loop path
+# on a _gated_ one (A/B gated vs. forced-loop). CONDITION does not apply to
+# native.
+#
+# DTYPE (default: empty) is forwarded the same way -- empty lets each
+# backend use its own default (vLLM auto-derives; HF defaults to bfloat16);
+# pass bf16/fp16/fp32 to force it for both backends:
+#   DTYPE=bf16 BACKEND_ENGINE=hf bash inference_and_eval/runai/sweep_eval.runai.sh v1_md --families hrm --yes
 
 set -euo pipefail
 
@@ -108,6 +138,20 @@ if [ ${#FAMILIES[@]} -gt 0 ]; then
   echo "[INFO] Restricting to families: ${FAMILIES[*]}"
 fi
 echo "[INFO] Sampling: temperature=${TEMPERATURE:-0.0} top_p=${TOP_P:-1.0}"
+# BACKEND_ENGINE (default: vllm) and CONDITION (default: direct) are passed
+# straight through to every infer_eval_multitask.runai.sh job this sweep
+# submits -- the same env-var passthrough TEMPERATURE/TOP_P use above. Set
+# BACKEND_ENGINE=hf to run every HRM checkpoint in the sweep through the
+# plain-transformers (non-vLLM) HF inference path instead of vLLM; set
+# BACKEND_ENGINE=native for the Ouro adaptive-early-exit path. Note: a
+# *_gated_* variant is auto-routed to native per-job by infer_eval_multitask
+# .runai.sh regardless of this global setting, so a mixed main_folder sweeps
+# correctly with no BACKEND_ENGINE set here. See infer_eval_multitask.runai
+# .sh's header for what each path does and why. No per-job dry-run validation
+# here -- a bad BACKEND_ENGINE value fails inside each submitted
+# infer_eval_multitask.runai.sh, same as the existing env vars.
+echo "[INFO] Backend engine: ${BACKEND_ENGINE:-vllm}$([ "${BACKEND_ENGINE:-vllm}" = hf ] && echo " (condition=${CONDITION:-direct})")$([ "${BACKEND_ENGINE:-vllm}" = native ] && echo " (forced globally; _gated_ auto-detects per-job anyway)")"
+echo "[INFO] Dtype: ${DTYPE:-<default: vllm auto-derive / hf bfloat16>}"
 
 PLANNED=()
 FAILED=()
@@ -116,6 +160,17 @@ for VARIANT_PATH in "${CHECKING_DIR}"/*/; do
   [ -d "${VARIANT_PATH}" ] || continue
   VARIANT_DIR=$(basename "${VARIANT_PATH}")
   FAMILY=$(echo "${VARIANT_DIR}" | cut -d'_' -f1 | tr '[:upper:]' '[:lower:]')
+
+  # Curriculum stage1 checkpoints are never the eval target -- see header.
+  IS_STAGE1=false
+  IFS='_' read -ra _TOKENS <<< "${VARIANT_DIR}"
+  for T in "${_TOKENS[@]}"; do
+    [ "${T}" = "stage1" ] && IS_STAGE1=true && break
+  done
+  if [ "${IS_STAGE1}" = true ]; then
+    echo "[INFO] ${VARIANT_DIR}: stage1 curriculum checkpoint, skipping (only stage2 is evaluated)" >&2
+    continue
+  fi
 
   if [ ${#FAMILIES[@]} -gt 0 ]; then
     SKIP=true

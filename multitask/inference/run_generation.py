@@ -27,6 +27,7 @@ below) -- e.g. ".../models/ouro/1.4b/checkpoint-25860" -> "ouro_checkpoint-25860
 overwritten in the same --out-dir.
 """
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -42,23 +43,24 @@ _CKPT_RE = re.compile(r"^checkpoint-(\d+)$")
 
 def model_tag(model_path):
     """Short filename-safe tag identifying model + checkpoint, e.g.
-    ".../loop_transformer/models/ouro/1.4b/checkpoint-25860" -> "ouro_checkpoint-25860",
-    ".../models/qwen/1_7b_std_v1/checkpoint-16165" -> "qwen_checkpoint-16165",
-    or a bare "ouro/checkpoint-25860" (no "models/" anchor, e.g. a shorter
-    test-env path) -> the same "ouro_checkpoint-25860". Model name is
-    whatever directory precedes the variant/checkpoint chain -- the segment
-    right after "models/" when present, else two levels up from
-    "checkpoint-<N>". Falls back to a sanitized version of the whole
-    path/Hub id (e.g. "Qwen/Qwen2.5-7B-Instruct" -> "Qwen_Qwen2.5-7B-Instruct")
-    when there's no checkpoint-<N> segment at all (a stock, non-fine-tuned
-    Hub model)."""
+    ".../models/v1_md/ouro_1_4b_std_plw005_1/checkpoint-25860" -> "ouro_1_4b_std_plw005_1_checkpoint-25860",
+    ".../models/qwen/1_7b_std_v1/checkpoint-16165" -> "1_7b_std_v1_checkpoint-16165",
+    or a bare "ouro/checkpoint-25860" (no variant dir, e.g. a shorter test-env
+    path) -> "ouro_checkpoint-25860". Model name is always the directory that
+    directly contains "checkpoint-<N>" (the variant dir), regardless of how
+    many "models/<main_folder>/..." segments precede it -- picking the
+    segment right after "models/" instead would collide across every variant
+    that shares a main_folder + checkpoint number (this repo's actual
+    on-cluster layout is models/<main_folder>/<variant>/checkpoint-<N>, so
+    that used to silently drop the variant name here). Falls back to a
+    sanitized version of the whole path/Hub id (e.g.
+    "Qwen/Qwen2.5-7B-Instruct" -> "Qwen_Qwen2.5-7B-Instruct") when there's no
+    checkpoint-<N> segment at all (a stock, non-fine-tuned Hub model)."""
     parts = Path(str(model_path).rstrip("/")).parts
     ckpt = next((p for p in parts if _CKPT_RE.match(p)), None)
-    if "models" in parts:
-        model_name = parts[parts.index("models") + 1]
-    elif ckpt is not None:
+    if ckpt is not None:
         idx = parts.index(ckpt)
-        model_name = parts[idx - 2] if idx >= 2 else parts[0]
+        model_name = parts[idx - 1] if idx >= 1 else None
     else:
         model_name = None
     if model_name and ckpt:
@@ -145,7 +147,7 @@ def run_sweep(
     retries=2, retry_temperature=None, fallback_model=None, fallback_backend=None,
     fallback_retries=1, out_dir=None, batch_size=None, enable_thinking=False,
     sampling_kwarg_overrides=None, temperature=0.0, top_p=1.0, top_k=-1,
-    enable_prefix_caching=False,
+    enable_prefix_caching=False, disable_any_whitespace=True,
 ):
     dataset_specs = dataset_specs if dataset_specs is not None else DATASET_SPECS
     out_dir = Path(out_dir) if out_dir else None
@@ -167,14 +169,17 @@ def run_sweep(
         llm_kwargs["tensor_parallel_size"] = tensor_parallel_size
 
     print(f"loading {model!r} (backend={backend!r}, llm_kwargs={llm_kwargs})")
-    llm = _make_llm(model, backend, disable_any_whitespace=True, llm_kwargs=llm_kwargs)
+    llm = _make_llm(model, backend, disable_any_whitespace=disable_any_whitespace, llm_kwargs=llm_kwargs)
 
     tag = model_tag(model)
 
     fallback_llm = None
     if fallback_model:
         print(f"loading fallback model {fallback_model!r} (backend={fallback_backend or backend!r})")
-        fallback_llm = _make_llm(fallback_model, fallback_backend or backend)
+        fallback_llm = _make_llm(
+            fallback_model, fallback_backend or backend,
+            disable_any_whitespace=disable_any_whitespace, llm_kwargs=llm_kwargs,
+        )
 
     completions_by_name = {}
     errors = {}
@@ -187,6 +192,20 @@ def run_sweep(
         gen = gen_settings(name)
         sampling_kwargs = {**gen["sampling_kwargs"], **(sampling_kwarg_overrides or {})}
         out_path = (out_dir / f"{tag}__{name}.json") if out_dir else None
+        # Resume support: skip a dataset whose completion JSON already exists
+        # and is valid, re-running only what didn't finish. The validity check
+        # (json.loads, not just .exists()) guards against a non-atomic write
+        # (vllm_structured_infer.run writes via Path.write_text -- no temp +
+        # rename) leaving a 0-byte / truncated file after an OOM/preemption,
+        # which a bare existence check would silently skip forever. Delete the
+        # JSON (or let the next run find it invalid) to force a regenerate.
+        if out_path and out_path.exists():
+            try:
+                json.loads(out_path.read_text(encoding="utf-8"))
+                print(f"[skip] {out_path.name} already exists for {name}; skipping")
+                continue
+            except (OSError, ValueError):
+                print(f"[skip] {out_path.name} exists but is not valid JSON; regenerating")
         try:
             completions = run_inference(
                 ds, model, backend, llm=llm,
@@ -213,7 +232,18 @@ def run_sweep(
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--backend", default="xgrammar")
+    parser.add_argument(
+        "--backend", default="xgrammar", choices=["xgrammar", "guidance", "outlines", "auto"],
+        help="vLLM structured-output backend. Only xgrammar/guidance/auto support "
+             "disable-any-whitespace (the default -- see --allow-any-whitespace to use "
+             "outlines instead).",
+    )
+    parser.add_argument(
+        "--allow-any-whitespace", action="store_true", default=False,
+        help="Turn OFF disable_any_whitespace (see vllm_structured_infer._make_llm's docstring) "
+             "-- required for --backend outlines, which does not support the flag and would "
+             "otherwise raise. Only needed for a non-xgrammar/guidance backend.",
+    )
     parser.add_argument("--root", default=str(DEFAULT_ROOT), help="huggingface_format/ directory")
     parser.add_argument(
         "--datasets", nargs="+", default=None,
@@ -298,6 +328,7 @@ def main():
         sampling_kwarg_overrides=_parse_sampling_kwargs(args.sampling_kwarg),
         temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
         enable_prefix_caching=args.enable_prefix_caching,
+        disable_any_whitespace=not args.allow_any_whitespace,
     )
 
 

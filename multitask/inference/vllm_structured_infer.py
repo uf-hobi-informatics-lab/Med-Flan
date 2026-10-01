@@ -81,9 +81,13 @@ to vLLM's `LLM.chat()` after this script's originally-targeted release;
 confirmed absent from vLLM 0.6.6.post1, present in 0.19.0), so this falls
 back to the template's own default with a printed note on an older
 install, the same pattern already used for
-StructuredOutputsParams/GuidedDecodingParams below. `"auto"` (the default)
-never passes `chat_template_kwargs` at all, so it's a no-op for any
-model/template that doesn't define `enable_thinking`.
+StructuredOutputsParams/GuidedDecodingParams below. `"auto"` never passes
+`chat_template_kwargs` at all, so it's a no-op for any model/template that
+doesn't define `enable_thinking`; `run()`'s own Python-level default
+(`enable_thinking=None`) is `"auto"`, but this file's own CLI defaults to
+`"false"` instead (explicitly disabling thinking via
+`chat_template_kwargs={"enable_thinking": False}`), since a Qwen3
+fine-tune trained without thinking tokens should be served the same way.
 """
 import argparse
 import json
@@ -115,6 +119,28 @@ DEFAULT_MAX_TOKENS = {
     # measured test+dev+train gold-target lengths (tiktoken cl100k):
     # p95=181, max=372.
     "sdoh_event_seq2seq": 1024,
+    # Tag-delimited seq2seq target (multitask/family_history_seq2seq_grammar.py)
+    # -- more compact than family_history's JSON target for the same
+    # summary; measured train+test gold-target lengths (tiktoken cl100k):
+    # p95=694, max=947.
+    "family_history_seq2seq": 1536,
+    # Tag-delimited seq2seq target (multitask/ner_re_medication_seq2seq_grammar.py)
+    # -- more compact than ner_re_medication's JSON target for the same
+    # drug/attribute extraction; measured train+test gold-target lengths
+    # (tiktoken cl100k): p95=2641, max=3798.
+    "ner_re_medication_seq2seq": 4096,
+    # Tag-delimited seq2seq target (multitask/medication_event_seq2seq_grammar.py)
+    # -- no filler spans (closed-vocab attributes only), so much shorter
+    # than the JSON path; measured train+dev+test gold-target lengths
+    # (tiktoken cl100k): p95=861, max=1474.
+    "medication_event_seq2seq": 1536,
+    # Tag-delimited seq2seq target
+    # (multitask/concept_assertion_relation_seq2seq_grammar.py) -- more
+    # compact than concept_assertion_relation's JSON target (no per-concept
+    # id/array-of-objects overhead), but still dense (many concepts+relations
+    # per discharge summary); measured train+test gold-target lengths
+    # (tiktoken cl100k): p95=4701, max=8884.
+    "concept_assertion_relation_seq2seq": 12800,
 }
 _DEFAULT_MAX_TOKENS = 12800
 
@@ -134,8 +160,8 @@ def _load_examples(dataset, limit=None):
     else:
         examples = dataset
 
-    if limit is not None:
-        examples = examples.select(range(limit))
+    if limit:
+        examples = examples.select(range(min(limit, len(examples))))
     return examples
 
 
@@ -346,6 +372,7 @@ def _make_llm(model, backend, disable_any_whitespace=False, llm_kwargs=None):
         config["disable_any_whitespace"] = True
 
     extra = dict(llm_kwargs or {})
+    extra.setdefault("trust_remote_code", True)
     # vLLM's LLM() construction below loads its OWN internal tokenizer via
     # AutoTokenizer.from_pretrained(model, ...) with no fix_mistral_regex --
     # that's what prints "incorrect regex pattern ... set fix_mistral_regex=True"
@@ -367,18 +394,29 @@ def _make_llm(model, backend, disable_any_whitespace=False, llm_kwargs=None):
     _prev_verbosity = hf_logging.get_verbosity()
     hf_logging.set_verbosity_error()
     try:
-        try:
-            llm = LLM(model=model, trust_remote_code=True,
-                      structured_outputs_config=config, **extra)
-        except TypeError:
+        # Whether this installed vLLM's LLM() even accepts
+        # structured_outputs_config is a property of the installed vLLM
+        # version, not of any particular call's kwargs -- checked directly
+        # via the constructor's own signature instead of a try/except
+        # TypeError, since a bare `except TypeError` around the call below
+        # can't tell "this vLLM predates structured_outputs_config" apart
+        # from "extra/llm_kwargs collided with a keyword this LLM() already
+        # passes" (e.g. a caller supplying trust_remote_code via
+        # --llm-kwarg) -- the latter would be misreported as a vLLM version
+        # problem and then raise the identical TypeError again on the
+        # guided_decoding_backend fallback path below, uncaught.
+        import inspect
+        accepts_structured_outputs_config = "structured_outputs_config" in inspect.signature(LLM.__init__).parameters
+        if accepts_structured_outputs_config:
+            llm = LLM(model=model, structured_outputs_config=config, **extra)
+        else:
             if disable_any_whitespace:
                 print(
                     "installed vLLM's LLM() does not accept structured_outputs_config (or its "
                     "disable_any_whitespace key) -- needs a newer vLLM to suppress the "
                     "grammar-constrained whitespace loop; ignoring the flag."
                 )
-            llm = LLM(model=model, trust_remote_code=True,
-                      guided_decoding_backend=backend, **extra)
+            llm = LLM(model=model, guided_decoding_backend=backend, **extra)
     finally:
         hf_logging.set_verbosity(_prev_verbosity)
 
@@ -543,12 +581,21 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
         -- the classification half of what used to be _try_once. status in
         {"ok", "surrogate", "bad_json", "violations", "repetitive",
         "truncated"}; value is the parsed dict / raw text accordingly (a
-        tuple alongside extra info for "violations"/"repetitive")."""
+        tuple alongside extra info for "violations"/"repetitive").
+
+        finish_reason == "length" is checked FIRST, before any task-specific
+        parsing -- a completion that hit max_tokens is truncated regardless
+        of whether it happens to be a PLAIN_TEXT_TASKS string or JSON that
+        still manages to parse despite being cut off exactly at a valid
+        closing brace; either way it must show up in truncated_ids, not get
+        silently scored as "ok"/"violations"/"repetitive"."""
         text = out.outputs[0].text
         truncated = out.outputs[0].finish_reason == "length"
         clean, had_surr = _strip_lone_surrogates(text)
         if had_surr:
             return "surrogate", clean
+        if truncated:
+            return "truncated", clean
         if ex["task"] in PLAIN_TEXT_TASKS:
             rep, reason = _looks_repetitive(clean)
             if rep:
@@ -557,12 +604,7 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
         try:
             parsed = json.loads(clean)
         except json.JSONDecodeError:
-            # A completion that hit max_tokens is expected to be unparseable
-            # (truncated mid-object); one that didn't but still fails to
-            # parse is a genuine grammar/decoding defect -- both are left as
-            # raw text either way, but only the truncated case is exempted
-            # from retry (see _BAD_STATUSES).
-            return ("truncated" if truncated else "bad_json"), clean
+            return "bad_json", clean
         vs = validate(ex["task"], parsed)
         if vs:
             return "violations", (parsed, vs)

@@ -35,6 +35,51 @@
 #   TEMPERATURE=0.5 TOP_P=0.95 bash inference_and_eval/runai/infer_eval_multitask.runai.sh <model_path>
 # Folded into MODEL_TAG/OUT_DIR whenever TEMPERATURE isn't the 0.0 default,
 # so a sampling run never overwrites the greedy baseline's results.
+#
+# BATCH_SIZE env var (unset by default -- run_generation.py's own default,
+# everyone in one llm.chat() call) is forwarded the same way, e.g. to isolate
+# a stuck/pathological example to its own call instead of one shared call
+# for the whole dataset:
+#   BATCH_SIZE=1 bash inference_and_eval/runai/infer_eval_multitask.runai.sh <model_path>
+#
+# BACKEND_ENGINE=hf (default: vllm) switches GEN_CMD to
+# inference_and_eval.inference.run_generation_hf -- a plain-transformers
+# generation path with no vLLM/xgrammar dependency, built for HRM
+# (trust_remote_code custom architecture, PrefixLM token_type_ids handling
+# vLLM's generic serving path can't apply -- see that module's docstring).
+# CONDITION (the HRM condition value this checkpoint was trained with,
+# e.g. "direct"/"cot"/"noisy"/"synth", or a composite like "synth,cot" --
+# see hf_structured_infer.py's --condition) defaults to "direct" (the
+# value every HRM checkpoint in this repo's sweeps is trained with);
+# override via the CONDITION env var for a non-direct checkpoint. Only read
+# when BACKEND_ENGINE=hf. Opt-in, not auto-selected for the hrm family: A/B
+# against the vLLM path first, e.g. with a small --limit/--datasets run,
+# before relying on it for a full sweep:
+#   BACKEND_ENGINE=hf bash inference_and_eval/runai/infer_eval_multitask.runai.sh <hrm_model_path>
+#
+# DTYPE (default: empty) is forwarded to both backends' --dtype. Empty lets
+# each backend use its own default (vLLM auto-derives from config.json
+# torch_dtype; the HF path defaults to bfloat16). Pass bf16/bfloat16/fp16/
+# fp32 to force it for either backend -- the vLLM side normalizes bf16->
+# bfloat16 since vLLM rejects the shorthand. e.g.:
+#   DTYPE=bf16 BACKEND_ENGINE=hf bash inference_and_eval/runai/infer_eval_multitask.runai.sh <hrm_model_path>
+#
+# BACKEND_ENGINE=native switches GEN_CMD to
+# inference_and_eval.inference.run_generation_native -- a plain-transformers
+# sweep that runs the model's own trust_remote_code generate() via
+# native_infer.run(). Used for Ouro checkpoints with adaptive early-exit
+# (the *_gated_* variant folders): vLLM's OuroForCausalLM loads the
+# early_exit_gate weights but never calls them, always running the full fixed
+# total_ut_steps loop and silently dropping the gate; the native path
+# respects it. Auto-selected when VARIANT_DIR contains "_gated_" and the
+# caller didn't explicitly set BACKEND_ENGINE -- so a gated checkpoint is
+# routed automatically. Set explicitly to force it, or to A/B a gated
+# checkpoint against vLLM (BACKEND_ENGINE=vllm) to see gated vs. forced-loop
+# behavior. No grammar-constrained JSON / retry / repetition handling (the
+# native path is the model's raw output); BATCH_SIZE is ignored on this path
+# (native_infer processes one example at a time). e.g.:
+#   BACKEND_ENGINE=native bash inference_and_eval/runai/infer_eval_multitask.runai.sh <ouro_gated_model_path>
+#   # or just submit a *_gated_* path with no BACKEND_ENGINE set -- auto-detected.
 
 set -euo pipefail
 
@@ -49,6 +94,31 @@ RANK="${2:-}"
 BACKEND=xgrammar
 TEMPERATURE="${TEMPERATURE:-0.0}"
 TOP_P="${TOP_P:-1.0}"
+BATCH_SIZE="${BATCH_SIZE:-}"
+# Capture whether BACKEND_ENGINE was explicitly set by the caller BEFORE this
+# script's own default below -- so the _gated_ auto-detection (after VARIANT_DIR
+# is known) only kicks in when the caller didn't already choose a backend.
+_BACKEND_ENGINE_SET=${BACKEND_ENGINE:+yes}
+BACKEND_ENGINE="${BACKEND_ENGINE:-vllm}"
+CONDITION="${CONDITION:-direct}"
+DTYPE="${DTYPE:-}"
+
+# vLLM concurrency/memory knobs to counter preemption thrash on HRM-Text
+# (B300, single-GPU). Empty by default -> vLLM's own defaults
+# (max_num_seqs=256, gpu_memory_utilization=0.9). For HRM the block after
+# FAMILY detection sets conservative defaults; override per-run, e.g.
+# MAX_NUM_SEQS=16 bash ...  Only applied to the vLLM branch (the HF path has
+# its own memory-budgeted sub-chunking -- hf_structured_infer._safe_max_new_tokens).
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-}"
+
+case "${BACKEND_ENGINE}" in
+  vllm|hf|native) ;;
+  *)
+    echo "[ERROR] unknown BACKEND_ENGINE '${BACKEND_ENGINE}' -- expected 'vllm', 'hf', or 'native'" >&2
+    exit 1
+    ;;
+esac
 
 PROJECT_NAME="genai-gs"
 BASE="/projects"
@@ -63,6 +133,21 @@ REPO_ROOT=${ROOT}/meddata
 CKPT_DIR=$(basename "${MODEL_PATH}")
 VARIANT_DIR=$(basename "$(dirname "${MODEL_PATH}")")
 FAMILY=$(echo "${VARIANT_DIR}" | cut -d'_' -f1 | tr '[:upper:]' '[:lower:]')
+
+# Auto-detect a gated Ouro checkpoint (variant dir name contains "_gated_")
+# and route it to the native (dynamic-round) backend -- vLLM's OuroForCausalLM
+# loads the early_exit_gate weights but never calls them in forward(), so it
+# always runs the full fixed total_ut_steps loop, silently dropping the
+# adaptive-early-exit feature the checkpoint was trained to use. The native
+# path (run_generation_native -> native_infer.run) runs the model's own
+# trust_remote_code generate(), which DOES respect the gate. Only auto-selects
+# when the caller didn't explicitly set BACKEND_ENGINE (an explicit vllm/hf
+# still wins, e.g. to A/B a gated checkpoint's gated vs. forced-full-loop
+# behavior). See native_infer.py's module docstring for the vLLM limitation.
+if [ -z "${_BACKEND_ENGINE_SET}" ] && echo "${VARIANT_DIR}" | grep -q "_gated_"; then
+  echo "[INFO] ${VARIANT_DIR}: _gated_ detected -> BACKEND_ENGINE=native (Ouro adaptive early-exit; vLLM ignores the gate)"
+  BACKEND_ENGINE=native
+fi
 
 case "${FAMILY}" in
   hrm)
@@ -85,6 +170,20 @@ esac
 # under MAIN_FOLDER as its own directory level, but MODEL_TAG keeps the
 # prefix too so filenames stay unambiguous if ever copied out of that layout.
 MAIN_FOLDER=$(basename "$(dirname "$(dirname "${MODEL_PATH}")")")
+
+# MAIN_FOLDER containing an "md" token (v1_md, v1_md_upsampled, ...) means
+# this checkpoint was trained on messages_md (markdown-rendered) data --
+# eval must use the matching "<dataset>_md" huggingface_format/ variant
+# (see run_generation.py's --markdown) so train/eval prompt formatting
+# doesn't silently mismatch. Token-matched (not a substring grep) for the
+# same reason sweep_eval.runai.sh's stage1/stage2 check is -- avoids a
+# false positive on e.g. a hypothetical "v1_medium" folder.
+USE_MARKDOWN=false
+IFS='_' read -ra _MF_TOKENS <<< "${MAIN_FOLDER}"
+for T in "${_MF_TOKENS[@]}"; do
+  [ "${T}" = "md" ] && USE_MARKDOWN=true && break
+done
+
 MODEL_TAG="${MAIN_FOLDER}_${VARIANT_DIR}_${CKPT_DIR}"
 if [ -n "${RANK}" ]; then
   MODEL_TAG="${MODEL_TAG}_rank$(printf '%02d' "${RANK}")"
@@ -94,6 +193,15 @@ fi
 if [ "${TEMPERATURE}" != "0.0" ]; then
   MODEL_TAG="${MODEL_TAG}_temp${TEMPERATURE}"
 fi
+# The filename tag run_generation.py's model_tag() actually writes the
+# per-dataset completion JSONs under -- <variant>_<checkpoint>, WITHOUT the
+# MAIN_FOLDER prefix or the _rankNN/_temp suffixes MODEL_TAG carries above
+# (MODEL_TAG is for the results DIR + eval CSV name; the JSON filenames come
+# from model_tag(MODEL_PATH) in run_generation.py). Passed to run_eval_csv as
+# --model-tag so its glob matches the actual <FILE_TAG>__<dataset>.json files
+# instead of falling back to the bare <dataset>.json pattern (which never
+# matches and silently skips every dataset in the eval step).
+FILE_TAG="${VARIANT_DIR}_${CKPT_DIR}"
 # RunAI rejects workload names over 50 chars -- a fully descriptive name
 # (main_folder + variant + checkpoint + rank + temp) can exceed that for
 # longer variant names, so truncate and append a short deterministic
@@ -103,7 +211,7 @@ fi
 # once both are cut to the same length. OUT_DIR (below) stays keyed off the
 # untruncated MODEL_TAG, so results/ directory and file names remain fully
 # descriptive regardless of this.
-FULL_JOB_NAME=$(echo "${MODEL_TAG}-infer-eval" | tr '[:upper:]_' '[:lower:]-' | tr -s '-' | sed -E 's/^-+|-+$//g')
+FULL_JOB_NAME=$(echo "${MODEL_TAG}-infer-eval" | tr '[:upper:]_.' '[:lower:]--' | tr -s '-' | sed -E 's/^-+|-+$//g')
 MAX_JOB_NAME_LEN=50
 if [ ${#FULL_JOB_NAME} -gt ${MAX_JOB_NAME_LEN} ]; then
   SUFFIX="-$(echo -n "${FULL_JOB_NAME}" | cksum | cut -d' ' -f1)"
@@ -119,6 +227,10 @@ echo "[INFO] Submitting job: ${JOB_NAME}"
 echo "[INFO] Model: ${MODEL_PATH}"
 echo "[INFO] Family: ${FAMILY} -> image ${IMAGE}"
 echo "[INFO] Sampling: temperature=${TEMPERATURE} top_p=${TOP_P}"
+echo "[INFO] Batch size: ${BATCH_SIZE:-<default: everyone in one call>}"
+echo "[INFO] Eval dataset variant: $([ "${USE_MARKDOWN}" = true ] && echo markdown || echo plain)"
+echo "[INFO] Backend engine: ${BACKEND_ENGINE}$([ "${BACKEND_ENGINE}" = hf ] && echo " (condition=${CONDITION})")$([ "${BACKEND_ENGINE}" = native ] && echo " (trust_remote_code, Ouro adaptive early-exit)")"
+echo "[INFO] Dtype: ${DTYPE:-<default: vllm auto-derive / hf bfloat16>}"
 echo "[INFO] Setting Run:ai project: ${PROJECT_NAME}"
 
 runai project set ${PROJECT_NAME}
@@ -133,8 +245,40 @@ STDOUT_LOG_DIR=/projects/med_flan/log/stdout/${JOB_NAME}
 # both the parent dir and the leaf dir name.
 OUT_DIR=/projects/med_flan/results/${MAIN_FOLDER}/${MODEL_TAG#${MAIN_FOLDER}_}
 
-GEN_CMD="python3 -m inference_and_eval.inference.run_generation --model ${MODEL_PATH} --backend ${BACKEND} --temperature ${TEMPERATURE} --top-p ${TOP_P} --out-dir ${OUT_DIR}"
-EVAL_CMD="python3 -m inference_and_eval.inference.run_eval_csv --completions-dir ${OUT_DIR} --out ${OUT_DIR}/${MODEL_TAG}_eval_results.csv"
+if [ "${BACKEND_ENGINE}" = hf ]; then
+  GEN_CMD="python3 -m inference_and_eval.inference.run_generation_hf --model ${MODEL_PATH} --condition ${CONDITION} --temperature ${TEMPERATURE} --top-p ${TOP_P} --out-dir ${OUT_DIR}"
+elif [ "${BACKEND_ENGINE}" = native ]; then
+  # Native (trust_remote_code) path -- runs Ouro's own generate() so the
+  # adaptive early-exit gate actually fires (vLLM ignores it). See
+  # run_generation_native.py / native_infer.py. --trust-remote-code is on by
+  # default in that wrapper (Ouro ships custom modeling code); --condition is
+  # HRM-only and not passed here.
+  GEN_CMD="python3 -m inference_and_eval.inference.run_generation_native --model ${MODEL_PATH} --trust-remote-code --temperature ${TEMPERATURE} --top-p ${TOP_P} --out-dir ${OUT_DIR}"
+else
+  GEN_CMD="python3 -m inference_and_eval.inference.run_generation --model ${MODEL_PATH} --backend ${BACKEND} --temperature ${TEMPERATURE} --top-p ${TOP_P} --out-dir ${OUT_DIR}"
+fi
+if [ "${USE_MARKDOWN}" = true ]; then
+  GEN_CMD="${GEN_CMD} --markdown"
+fi
+if [ -n "${BATCH_SIZE}" ]; then
+  # --batch-size is a vLLM/HF knob (caps examples per llm.chat()/generate()
+  # call). The native path (native_infer.run) processes one example at a time
+  # by design -- no batching to cap -- so silently ignore BATCH_SIZE there
+  # instead of passing a flag the wrapper doesn't accept.
+  if [ "${BACKEND_ENGINE}" != native ]; then
+    GEN_CMD="${GEN_CMD} --batch-size ${BATCH_SIZE}"
+  fi
+fi
+# DTYPE forwarded to both backends' --dtype: vLLM accepts bfloat16/float16/
+# float32/auto (and the run_generation.py side normalizes bf16->bfloat16);
+# the HF side accepts bf16/bfloat16/fp16/fp32. Empty (default) lets each
+# backend use its own default (vLLM auto-derives from config.json; HF
+# defaults to bfloat16) -- same behavior as before this passthrough.
+if [ -n "${DTYPE}" ]; then
+  GEN_CMD="${GEN_CMD} --dtype ${DTYPE}"
+fi
+
+EVAL_CMD="python3 -m inference_and_eval.inference.run_eval_csv --completions-dir ${OUT_DIR} --model-tag ${FILE_TAG} --out ${OUT_DIR}/${MODEL_TAG}_eval_results.csv"
 
 echo "[DEBUG] GEN_CMD=${GEN_CMD}"
 echo "[DEBUG] EVAL_CMD=${EVAL_CMD}"

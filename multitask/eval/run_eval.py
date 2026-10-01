@@ -112,6 +112,20 @@ def _run_family_history(completions):
         m._run_eval(2, m.GOLD_S2, s2_path)
 
 
+def _run_family_history_seq2seq(completions):
+    """Parallel to `_run_family_history`, for the seq2seq grammar path
+    (multitask/family_history_seq2seq_grammar.py): completions are raw
+    generated strings, never JSON, so this skips `_parsed_target`'s
+    JSON-parse entirely -- same reasoning as `_run_brat_seq2seq`."""
+    from multitask.convert_back import family_history_2019_t2 as fh
+    from multitask.convert_back import family_history_2019_t2_seq2seq as m
+
+    predictions = [(doc_id, m.to_target(c)) for doc_id, c in completions.items()]
+    with tempfile.TemporaryDirectory() as tmp:
+        s2_path = fh.write_tsv(predictions, tmp)
+        fh._run_eval(2, fh.GOLD_S2, s2_path)
+
+
 def _run_sts(completions):
     from multitask.convert_back import sts_2019_t1 as m
 
@@ -138,6 +152,17 @@ def _run_concept_assertion_relation(completions):
     print(json.dumps(m.score_dataset(predictions, split="test"), indent=2))
 
 
+def _run_concept_assertion_relation_seq2seq(completions):
+    """Parallel to `_run_concept_assertion_relation`, for the seq2seq grammar
+    path (multitask/concept_assertion_relation_seq2seq_grammar.py):
+    completions are raw generated strings, never JSON, so this skips
+    `_parsed_target`'s JSON-parse entirely and hands the raw text straight to
+    `i2b2_2010_seq2seq.score_dataset`, which does its own parsing internally."""
+    from multitask.convert_back import i2b2_2010_seq2seq as m
+
+    print(json.dumps(m.score_dataset(completions, split="test"), indent=2))
+
+
 def run_eval(dataset, completions):
     """dataset: a name from README's status table (e.g. "2018_n2c2_track2",
     "MedNLI", "covid (LitCovid)"). completions: {id: raw completion string}.
@@ -158,14 +183,24 @@ def run_eval(dataset, completions):
     if task == "sdoh_event_seq2seq":
         from multitask.convert_back import sdoh_2022_t2_seq2seq as m
         return _run_brat_seq2seq(dataset, completions, m)
+    if task == "ner_re_medication_seq2seq":
+        from multitask.convert_back import ner_re_2018_t2_seq2seq as m
+        return _run_brat_seq2seq(dataset, completions, m)
+    if task == "medication_event_seq2seq":
+        from multitask.convert_back import medication_event_2022_t1_seq2seq as m
+        return _run_brat_seq2seq(dataset, completions, m)
     if task == "cohort_eligibility":
         return _run_cohort_eligibility(completions)
     if task == "family_history":
         return _run_family_history(completions)
+    if task == "family_history_seq2seq":
+        return _run_family_history_seq2seq(completions)
     if task == "sts_regression":
         return _run_sts(completions)
     if task == "concept_assertion_relation":
         return _run_concept_assertion_relation(completions)
+    if task == "concept_assertion_relation_seq2seq":
+        return _run_concept_assertion_relation_seq2seq(completions)
     if task == "disorder_normalization":
         from multitask.convert_back import disorder_normalization_2015_t14 as m
 
@@ -265,6 +300,24 @@ def _self_check_all():
         print(f"\n=== {dataset} ===")
         completions = {ex["id"]: ex["target"] for ex in sdoh_2022_t2_seq2seq._examples_with_raw_target(source, "test")}
         run_eval(dataset, completions)
+
+    from multitask.convert_back import ner_re_2018_t2_seq2seq
+
+    print("\n=== 2018_n2c2_track2_seq2seq ===")
+    completions = {ex["id"]: ex["target"] for ex in ner_re_2018_t2_seq2seq._examples_with_raw_target("test")}
+    run_eval("2018_n2c2_track2_seq2seq", completions)
+
+    from multitask.convert_back import medication_event_2022_t1_seq2seq
+
+    print("\n=== 2022n2c2_track1_seq2seq ===")
+    completions = {ex["id"]: ex["target"] for ex in medication_event_2022_t1_seq2seq._examples_with_raw_target("test")}
+    run_eval("2022n2c2_track1_seq2seq", completions)
+
+    from multitask.convert_back import i2b2_2010_seq2seq
+
+    print("\n=== 2010_i2b2_va_seq2seq ===")
+    completions = {ex["id"]: ex["target"] for ex in i2b2_2010_seq2seq._examples_with_raw_target("test")}
+    run_eval("2010_i2b2_va_seq2seq", completions)
 
     print("\n=== 2018_n2c2_track1 ===")
     run_eval("2018_n2c2_track1", dict(cohort_eligibility_2018_t1._examples_with_raw_target("test")))

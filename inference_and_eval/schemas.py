@@ -276,6 +276,55 @@ TASKS = {
             '"text"}, ...]}`.'
         ),
     },
+    # Additive sibling to ner_re_medication: same Drug + linked-attribute
+    # extraction, but a compact non-JSON tag-delimited target instead of
+    # JSON (see inference_and_eval/ner_re_medication_seq2seq_grammar.py).
+    # Never touches ner_re_medication's own task entry, builder, or
+    # convert_back module.
+    "ner_re_medication_seq2seq": {
+        "category": "information_extraction",
+        "display": "NER_RE_Seq2Seq",
+        "instruction": (
+            "### Task\n"
+            "Extract every Drug mention in this note and its linked "
+            "clinical attributes, per the 2018 n2c2 Track 2 ADE/"
+            "medication-extraction schema (Henry et al. 2020, "
+            "JAMIA).\n\n"
+            "### Definitions\n"
+            "- **Drug**: a medication name (generic, brand, or drug "
+            "class)\n"
+            '- **Strength**: amount of active ingredient per dose unit '
+            '(e.g. "40 mg")\n'
+            "- **Form**: the drug's physical form (e.g. tablet, patch, "
+            "cream)\n"
+            '- **Dosage**: amount given per administration (e.g. "2 '
+            'tablets")\n'
+            '- **Frequency**: how often it\'s taken (e.g. "twice '
+            'daily")\n'
+            '- **Route**: how it enters the body (e.g. "PO", "IV", '
+            '"topically")\n'
+            "- **Duration**: how long it is/was taken\n"
+            "- **Reason**: the medical indication for the drug\n"
+            "- **ADE**: an adverse reaction attributed to the drug\n\n"
+            "Each attribute links to the Drug mention(s) it describes -- "
+            "any attribute type may link to more than one Drug, most "
+            "often Reason/ADE (e.g. one shared side effect attributed to "
+            "two co-administered drugs).\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in this format (copy drug/"
+            "attribute text verbatim from the note; if there are no "
+            "Drug mentions, return an empty string):\n"
+            "`<Drug> drug_text (<AttrType> filler_text)*`, one such "
+            "clause per drug (repeat an AttrType tag once per filler if "
+            "it links more than one mention to that drug); an attribute "
+            "mention with no linked Drug is its own standalone "
+            "`<AttrType> filler_text` clause. All clauses are joined "
+            'with " {AND} ".\n'
+            "Example: `<Drug> Lipitor <Strength> 10 mg <Reason> high "
+            "cholesterol {AND} <Drug> Colace {AND} <Reason> occasional "
+            "cough`"
+        ),
+    },
     "medication_event": {
         "category": "information_extraction",
         "display": "Medication_Event",
@@ -310,6 +359,49 @@ TASKS = {
             '"Certainty", "Temporality", "Actor", "Negation"}}, ...]}` '
             '-- "attributes" is empty for NoDisposition/Undetermined '
             "events."
+        ),
+    },
+    # Additive sibling to medication_event: same trigger + attribute
+    # classification, but a compact non-JSON tag-delimited target instead
+    # of JSON (see inference_and_eval/medication_event_seq2seq_grammar.py).
+    # Never touches medication_event's own task entry, builder, or
+    # convert_back module.
+    "medication_event_seq2seq": {
+        "category": "information_extraction",
+        "display": "Medication_Event_Seq2Seq",
+        "instruction": (
+            "### Task\n"
+            "For each medication mention, classify whether a medication "
+            "change is discussed, per the CMED schema (Mahajan et al. "
+            "2021).\n\n"
+            "### Definitions\n"
+            '- **Disposition**: a change is discussed (e.g. "start '
+            'Plavix")\n'
+            '- **NoDisposition**: no change is discussed (e.g. '
+            '"continue lisinopril")\n'
+            '- **Undetermined**: unclear from local context (e.g. '
+            '"Plan: Lasix")\n\n'
+            "For each Disposition mention, also classify:\n"
+            "- **Action**: Start/Stop/Increase/Decrease/UniqueDose/"
+            "OtherChange/Unknown\n"
+            "- **Certainty**: Certain/Hypothetical/Conditional/Unknown\n"
+            "- **Temporality**: Past/Present/Future/Unknown\n"
+            "- **Actor**: Physician/Patient/Unknown\n"
+            "- **Negation**: Negated/NotNegated\n\n"
+            "A single mention may have 0, 1, or more Disposition "
+            "events.\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in this format (copy the "
+            "medication mention text verbatim from the note; if there "
+            "are no mentions, return an empty string):\n"
+            "`<EventType> mention_text (<AttrName> [attr_value])*` -- "
+            "attribute tags are omitted entirely for NoDisposition/"
+            "Undetermined events. One such clause per mention, all "
+            'joined with " {AND} ".\n'
+            "Example: `<Disposition> Prozac <Action> [Start] "
+            "<Certainty> [Certain] <Temporality> [Present] <Actor> "
+            "[Physician] <Negation> [NotNegated] {AND} <NoDisposition> "
+            "barbituate`"
         ),
     },
     "sdoh_event": {
@@ -554,6 +646,70 @@ TASKS = {
             '"arg2"}, ...]}`.'
         ),
     },
+    "concept_assertion_relation_seq2seq": {
+        "category": "information_extraction",
+        "display": "Concept_Assertion_Relation_Seq2Seq",
+        "instruction": (
+            "### Task\n"
+            "Extract every problem, test, and treatment concept. For "
+            "each problem concept, also give its assertion status. "
+            "Link related concepts with one of 8 relation types (same "
+            "sentence only).\n\n"
+            "### Concept Types\n"
+            "- **problem**: an abnormal finding about the patient's "
+            "body or mind that could be treated (a disease, sign/"
+            "symptom, or injury; excludes normal findings and raw "
+            "vital-sign/lab values)\n"
+            "- **test**: a procedure/panel/exam performed to find out "
+            "about a problem\n"
+            "- **treatment**: a procedure, device, or substance given "
+            "to resolve a problem\n\n"
+            "### Assertion Status (problem concepts only)\n"
+            "- **present** (default): stated to exist, now or in the "
+            "past\n"
+            "- **absent**: stated not to exist, ruled out, or "
+            "resolved\n"
+            '- **possible**: uncertain, e.g. "likely"/"probably not"/'
+            '"suspected"\n'
+            "- **conditional**: occurs only under specific "
+            "circumstances, e.g. exertional symptoms or a drug "
+            "allergy\n"
+            "- **hypothetical**: a problem the patient may develop in "
+            "the future\n"
+            "- **associated_with_someone_else**: concerns someone other "
+            "than the patient, e.g. family history\n\n"
+            "### Relations (same sentence only)\n"
+            "- **TrIP**: treatment improves/cures problem\n"
+            "- **TrWP**: treatment given for problem but doesn't help "
+            "or worsens it\n"
+            "- **TrCP**: treatment causes a different problem than the "
+            "one it was given for\n"
+            "- **TrAP**: treatment given for problem, outcome not "
+            "stated\n"
+            "- **TrNAP**: treatment withheld/stopped because of a "
+            "problem it didn't cause\n"
+            "- **TeRP**: test performed and reveals the problem\n"
+            "- **TeCP**: test performed to investigate the problem, "
+            "outcome not known\n"
+            "- **PIP**: one problem reveals, describes, or causes "
+            "another\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in this format (copy concept "
+            "text verbatim from the note; if there are none, return an "
+            "empty string):\n"
+            "`<ConceptType> [assertion_value] concept_text` for a "
+            "concept -- the `[assertion_value]` tag is included only for "
+            "problem concepts. `<RelationType> <Arg1!ConceptType> "
+            "arg1_text <Arg2!ConceptType> arg2_text` for a relation, "
+            "where each `<Arg1!...>`/`<Arg2!...>` tag's `ConceptType` and "
+            "text repeat one of the concepts already emitted earlier in "
+            "the sequence. List every concept before any relation that "
+            "refers to it. Join everything with \" {AND} \".\n"
+            "Example: `<problem> [present] chest pain {AND} <treatment> "
+            "aspirin {AND} <TrAP> <Arg1!treatment> aspirin "
+            "<Arg2!problem> chest pain`"
+        ),
+    },
     # --- Tier A subtask-enrichment tasks (see design.md's "Fixing doc-level
     # training-data scarcity" section) -- train-only, additive re-framings of
     # ner_re_medication/medication_event's own gold annotations into an
@@ -689,6 +845,50 @@ TASKS = {
             "events."
         ),
     },
+    # Paragraph-window mirror of medication_event_seq2seq (see
+    # inference_and_eval/medication_event_seq2seq_grammar.py) -- same
+    # HF-only, additive convention as medication_event_paragraph above,
+    # just with the tag-delimited target instead of JSON.
+    "medication_event_seq2seq_paragraph": {
+        "category": "information_extraction",
+        "display": "Medication_Event_Seq2Seq_Paragraph_Window",
+        "instruction": (
+            "### Task\n"
+            "This is one paragraph excerpted from a larger clinical "
+            "note, not the complete note. For each medication mention "
+            "in THIS EXCERPT ONLY, classify whether a medication change "
+            "is discussed, per the CMED schema (Mahajan et al. "
+            "2021).\n\n"
+            "### Definitions\n"
+            '- **Disposition**: a change is discussed (e.g. "start '
+            'Plavix")\n'
+            '- **NoDisposition**: no change is discussed (e.g. '
+            '"continue lisinopril")\n'
+            '- **Undetermined**: unclear from local context (e.g. '
+            '"Plan: Lasix")\n\n'
+            "For each Disposition mention, also classify:\n"
+            "- **Action**: Start/Stop/Increase/Decrease/UniqueDose/"
+            "OtherChange/Unknown\n"
+            "- **Certainty**: Certain/Hypothetical/Conditional/Unknown\n"
+            "- **Temporality**: Past/Present/Future/Unknown\n"
+            "- **Actor**: Physician/Patient/Unknown\n"
+            "- **Negation**: Negated/NotNegated\n\n"
+            "A single mention may have 0, 1, or more Disposition "
+            "events.\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in this format (copy the "
+            "medication mention text verbatim from the note; if there "
+            "are no mentions, return an empty string):\n"
+            "`<EventType> mention_text (<AttrName> [attr_value])*` -- "
+            "attribute tags are omitted entirely for NoDisposition/"
+            "Undetermined events. One such clause per mention, all "
+            'joined with " {AND} ".\n'
+            "Example: `<Disposition> Prozac <Action> [Start] "
+            "<Certainty> [Certain] <Temporality> [Present] <Actor> "
+            "[Physician] <Negation> [NotNegated] {AND} <NoDisposition> "
+            "barbituate`"
+        ),
+    },
     # --- Tier A subtask-enrichment tasks for concept_assertion_relation
     # (2010_i2b2_va) -- same train-only/HF-only convention as the
     # ner_re_medication/medication_event subtasks above. See SUBTASK_OF below.
@@ -820,6 +1020,73 @@ TASKS = {
             '"arg2"}, ...]}`.'
         ),
     },
+    "concept_assertion_relation_seq2seq_section": {
+        "category": "information_extraction",
+        "display": "Concept_Assertion_Relation_Seq2Seq_Section_Window",
+        "instruction": (
+            "### Task\n"
+            "This is one section excerpted from a larger clinical note "
+            '(e.g. "HISTORY OF PRESENT ILLNESS", "PAST MEDICAL '
+            'HISTORY"), not the complete note. Extract every problem, '
+            "test, and treatment concept in THIS EXCERPT ONLY. For each "
+            "problem concept, give its assertion status. Link related "
+            "concepts with one of 8 relation types (same sentence "
+            "only).\n\n"
+            "### Concept Types\n"
+            "- **problem**: an abnormal finding about the patient's "
+            "body or mind that could be treated (a disease, sign/"
+            "symptom, or injury; excludes normal findings and raw "
+            "vital-sign/lab values)\n"
+            "- **test**: a procedure/panel/exam performed to find out "
+            "about a problem\n"
+            "- **treatment**: a procedure, device, or substance given "
+            "to resolve a problem\n\n"
+            "### Assertion Status\n"
+            "- **present** (default): stated to exist, now or in the "
+            "past\n"
+            "- **absent**: stated not to exist, ruled out, or "
+            "resolved\n"
+            '- **possible**: uncertain, e.g. "likely"/"probably not"/'
+            '"suspected"\n'
+            "- **conditional**: occurs only under specific "
+            "circumstances, e.g. exertional symptoms or a drug "
+            "allergy\n"
+            "- **hypothetical**: a problem the patient may develop in "
+            "the future\n"
+            "- **associated_with_someone_else**: concerns someone other "
+            "than the patient, e.g. family history\n\n"
+            "### Relations (same sentence only)\n"
+            "- **TrIP**: treatment improves/cures problem\n"
+            "- **TrWP**: treatment given for problem but doesn't help "
+            "or worsens it\n"
+            "- **TrCP**: treatment causes a different problem than the "
+            "one it was given for\n"
+            "- **TrAP**: treatment given for problem, outcome not "
+            "stated\n"
+            "- **TrNAP**: treatment withheld/stopped because of a "
+            "problem it didn't cause\n"
+            "- **TeRP**: test performed and reveals the problem\n"
+            "- **TeCP**: test performed to investigate the problem, "
+            "outcome not known\n"
+            "- **PIP**: one problem reveals, describes, or causes "
+            "another\n\n"
+            "### Output Format\n"
+            "Return plain text, not JSON, in this format (copy concept "
+            "text verbatim from the note; if there are none, return an "
+            "empty string):\n"
+            "`<ConceptType> [assertion_value] concept_text` for a "
+            "concept -- the `[assertion_value]` tag is included only for "
+            "problem concepts. `<RelationType> <Arg1!ConceptType> "
+            "arg1_text <Arg2!ConceptType> arg2_text` for a relation, "
+            "where each `<Arg1!...>`/`<Arg2!...>` tag's `ConceptType` and "
+            "text repeat one of the concepts already emitted earlier in "
+            "the sequence. List every concept before any relation that "
+            "refers to it. Join everything with \" {AND} \".\n"
+            "Example: `<problem> [present] chest pain {AND} <treatment> "
+            "aspirin {AND} <TrAP> <Arg1!treatment> aspirin "
+            "<Arg2!problem> chest pain`"
+        ),
+    },
 }
 
 # Tier A subtask task-tag -> parent end-to-end task-tag. Single source of
@@ -843,6 +1110,8 @@ PARAGRAPH_OF = {
     "ner_re_medication_paragraph": "ner_re_medication",
     "concept_assertion_relation_section": "concept_assertion_relation",
     "medication_event_paragraph": "medication_event",
+    "medication_event_seq2seq_paragraph": "medication_event_seq2seq",
+    "concept_assertion_relation_seq2seq_section": "concept_assertion_relation_seq2seq",
 }
 
 # The 13 fixed cohort-eligibility criteria (2018 n2c2 Track 1), in the order
@@ -896,7 +1165,11 @@ def cohort_criterion_prompt(criterion: str) -> str:
 # multitask/seq2seq_grammar.py) -- same mechanism build_discharge_me
 # already relies on for "summarization", just a different plain-text
 # shape, not free prose.
-PLAIN_TEXT_TASKS = {"summarization", "sdoh_event_seq2seq"}
+PLAIN_TEXT_TASKS = {
+    "summarization", "sdoh_event_seq2seq", "ner_re_medication_seq2seq",
+    "medication_event_seq2seq", "medication_event_seq2seq_paragraph",
+    "concept_assertion_relation_seq2seq", "concept_assertion_relation_seq2seq_section",
+}
 
 # sdoh_event_seq2seq task-tag -> parent end-to-end task-tag it re-frames
 # the same underlying events into a different target serialization for
@@ -904,7 +1177,12 @@ PLAIN_TEXT_TASKS = {"summarization", "sdoh_event_seq2seq"}
 # PARAGRAPH_OF -- a distinct mechanism from either (same text AND same
 # labels as the parent, just a different output grammar) -- so
 # hf_dataset_stats.py can report it under its own heading.
-SEQ2SEQ_OF = {"sdoh_event_seq2seq": "sdoh_event"}
+SEQ2SEQ_OF = {
+    "sdoh_event_seq2seq": "sdoh_event",
+    "ner_re_medication_seq2seq": "ner_re_medication",
+    "medication_event_seq2seq": "medication_event",
+    "concept_assertion_relation_seq2seq": "concept_assertion_relation",
+}
 
 
 def _check_task(task: str) -> None:

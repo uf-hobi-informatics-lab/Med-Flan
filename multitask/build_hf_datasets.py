@@ -24,18 +24,26 @@ from multitask.builders.cohort_eligibility_2018_t1 import build_cohort_eligibili
 from multitask.builders.disorder_normalization_2015_t14 import build_disorder_normalization
 from multitask.builders.emrqa_msquad import build_emrqa_msquad
 from multitask.builders.family_history_2019_t2 import build_family_history
+from multitask.builders.family_history_2019_t2_seq2seq import build_family_history_seq2seq
 from multitask.builders.i2b2_2010 import (
     build_concept_assertion_relation, build_concept_assertion_relation_ner_only,
     build_concept_assertion_relation_re_only, build_concept_assertion_relation_section,
+)
+from multitask.builders.i2b2_2010_seq2seq import (
+    build_concept_assertion_relation_seq2seq, build_concept_assertion_relation_seq2seq_section,
 )
 from multitask.builders.medication_event_2022_t1 import (
     build_medication_event, build_medication_event_attr_only, build_medication_event_paragraph,
     build_medication_event_trigger_only,
 )
+from multitask.builders.medication_event_2022_t1_seq2seq import (
+    build_medication_event_seq2seq, build_medication_event_seq2seq_paragraph,
+)
 from multitask.builders.ner_re_2018_t2 import (
     build_ner_re_medication, build_ner_re_medication_ner_only, build_ner_re_medication_paragraph,
     build_ner_re_medication_re_only,
 )
+from multitask.builders.ner_re_2018_t2_seq2seq import build_ner_re_medication_seq2seq
 from multitask.builders.sdoh_2022_t2 import build_sdoh_event
 from multitask.builders.sdoh_2022_t2_seq2seq import (
     build_sdoh_event_seq2seq, build_sdoh_event_seq2seq_curriculum, build_sdoh_event_seq2seq_true_negative,
@@ -88,9 +96,22 @@ REGISTRY = [
     # Never wired into build_unified_dataset.py/run_eval.py -- doc-level
     # prediction/scoring stays authoritative (see design.md).
     ("2018_n2c2_track2_paragraph", build_ner_re_medication_paragraph, ["train", "test"]),
+    # Seq2seq target format for ner_re_medication (task tag
+    # ner_re_medication_seq2seq, see
+    # multitask/ner_re_medication_seq2seq_grammar.py) -- brand-new,
+    # additive alongside the JSON-based row above, never merged with it.
+    # No true-negative/curriculum variants (no motivating mechanism for
+    # this task, unlike sdoh_event_seq2seq).
+    ("2018_n2c2_track2_seq2seq", build_ner_re_medication_seq2seq, ["train", "test"]),
     ("2019_n2c2_track1", build_sts, ["train", "test"]),
     ("2019_n2c2_track1_cls", build_sts_classification, ["train", "test"]),
     ("2019_n2c2_track2", build_family_history, ["train", "test"]),
+    # Seq2seq target format for family_history (task tag
+    # family_history_seq2seq, see multitask/family_history_seq2seq_grammar.py)
+    # -- brand-new, additive alongside the JSON-based row above, never
+    # merged with it. No character offsets exist for this task, so unlike
+    # sdoh_event_seq2seq there are no true-negative/curriculum variants.
+    ("2019_n2c2_track2_seq2seq", build_family_history_seq2seq, ["train", "test"]),
     ("2022n2c2_track1", build_medication_event, ["train", "dev", "test"]),
     # Tier A subtask-enrichment datasets for medication_event -- same
     # train-only/HF-only convention as the two above.
@@ -104,6 +125,17 @@ REGISTRY = [
     # build_unified_dataset.py/run_eval.py -- doc-level scoring stays
     # authoritative (see design.md).
     ("2022n2c2_track1_paragraph", build_medication_event_paragraph, ["train", "dev", "test"]),
+    # Seq2seq target format for medication_event (task tag
+    # medication_event_seq2seq, see
+    # multitask/medication_event_seq2seq_grammar.py) -- brand-new,
+    # additive alongside the JSON-based row above, never merged with it.
+    # No true-negative/curriculum variant (no motivating mechanism for
+    # this task, unlike sdoh_event_seq2seq).
+    ("2022n2c2_track1_seq2seq", build_medication_event_seq2seq, ["train", "dev", "test"]),
+    # Paragraph-window mirror of the seq2seq row above, same convention as
+    # 2022n2c2_track1_paragraph -- HF-only, never wired into
+    # build_unified_dataset.py/run_eval.py.
+    ("2022n2c2_track1_seq2seq_paragraph", build_medication_event_seq2seq_paragraph, ["train", "dev", "test"]),
     ("2022n2c2_track2_mimic", lambda s: build_sdoh_event("mimic", s), ["train", "dev", "test"]),
     ("2022n2c2_track2_uw", lambda s: build_sdoh_event("uw", s), ["train", "dev", "test"]),
     # Microsoft-Nuance-style seq2seq target format for sdoh_event (task tag
@@ -130,6 +162,14 @@ REGISTRY = [
     # train+test both built (per the "prepare all" instruction); never
     # wired into build_unified_dataset.py/run_eval.py.
     ("2010_i2b2_va_section", build_concept_assertion_relation_section, ["train", "test"]),
+    # concept_assertion_relation_seq2seq (tag-delimited target, see
+    # multitask/concept_assertion_relation_seq2seq_grammar.py) -- brand-new,
+    # additive alongside the JSON-based rows above, never merged with them.
+    ("2010_i2b2_va_seq2seq", build_concept_assertion_relation_seq2seq, ["train", "test"]),
+    # Section-window mirror, same HF-only/train+test convention as
+    # 2010_i2b2_va_section above; never wired into
+    # build_unified_dataset.py/run_eval.py.
+    ("2010_i2b2_va_seq2seq_section", build_concept_assertion_relation_seq2seq_section, ["train", "test"]),
     # HF ships train/validation only, no test -- dev stands in as the final
     # eval split, same fallback as medmcqa above.
     ("emrqa-msquad", build_emrqa_msquad, ["train", "dev"]),

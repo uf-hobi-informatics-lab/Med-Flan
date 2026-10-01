@@ -190,6 +190,16 @@ def run_eval_sweep(completions_dir, dataset_specs=None, out_csv=None, model_tag=
 
     rows = []  # (dataset, metric, value)
     for name, eval_kind, _eval_name in dataset_specs:
+        # When --model-tag is given, match exactly "<tag>__<name>.json"
+        # (run_generation.py writes <model_tag(MODEL_PATH)>__<name>.json). When
+        # omitted, glob "*__<name>.json" -- every generator in this tree writes
+        # the <tag>__<name>.json shape (run_generation / run_generation_hf /
+        # run_generation_native / vllm_structured_infer / native_infer /
+        # hf_structured_infer), never a bare "<name>.json", so the bare default
+        # this used to fall back to matched nothing and silently skipped every
+        # dataset on a manual invocation. The wildcard matches any tag's file
+        # (most-recently-modified wins on ambiguity); matches the multitask
+        # sibling's own default (multitask/inference/run_eval_csv.py:193).
         pattern = f"{model_tag}__{name}.json" if model_tag else f"*__{name}.json"
         matches = sorted(completions_dir.glob(pattern))
         if not matches:

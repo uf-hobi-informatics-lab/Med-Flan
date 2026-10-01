@@ -89,7 +89,10 @@ must never simply be dropped).
 """
 import re
 
-from inference_and_eval.reanchor import _flex_pattern
+from inference_and_eval.span_solver import (
+    flex_candidates as _candidates, overlaps_any as _overlaps_any, search_floor as _search_floor,
+    search_nearest as _search_nearest,
+)
 from inference_and_eval.target_schema import SHAC_EVENT_TYPES, SHAC_ROLE_NAMES
 
 AND_SEP = " {AND} "
@@ -230,40 +233,6 @@ def parse_and_resolve(seq_str, doc_text=None):
             "attributes": ev["attributes"],
         })
     return {"events": events}
-
-
-def _candidates(text, doc_text):
-    pattern = _flex_pattern(text)
-    if pattern is None:
-        return []
-    cands = [(m.start(), m.end()) for m in pattern.finditer(doc_text)]
-    if cands:
-        return cands
-    # Case-insensitive fallback, same as reanchor().
-    return [(m.start(), m.end()) for m in re.finditer(pattern.pattern, doc_text, re.IGNORECASE)]
-
-
-def _overlaps_any(span, used_spans):
-    return any(a < span[1] and span[0] < b for a, b in used_spans)
-
-
-def _search_floor(cands, used_spans, floor):
-    """Nearest unclaimed candidate at or after `floor`; falling back to the
-    first unclaimed candidate anywhere if none exists past `floor`. Mirrors
-    reanchor()'s `min_start` mode exactly (see module docstring)."""
-    forward = [c for c in cands if c[0] >= floor and not _overlaps_any(c, used_spans)]
-    if forward:
-        return min(forward, key=lambda c: c[0])
-    unclaimed = [c for c in cands if not _overlaps_any(c, used_spans)]
-    return min(unclaimed, key=lambda c: c[0]) if unclaimed else None
-
-
-def _search_nearest(cands, hint):
-    """Candidate with the smallest distance to `hint`, either direction.
-    Mirrors reanchor()'s `near` mode exactly (see module docstring)."""
-    if not cands:
-        return None
-    return min(cands, key=lambda c: min(abs(c[0] - hint), abs(c[1] - hint)))
 
 
 def parse_and_resolve_with_spans(seq_str, doc_text):

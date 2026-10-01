@@ -169,7 +169,7 @@ def build_sdoh_event_seq2seq_curriculum(source, split):
             for ev in events:
                 spans = [ev["trigger_span"]] + [f["span"] for f in ev["roles"].values()]
                 fully_in = all(wstart <= s and e <= wend for s, e in spans)
-                any_in = any(wstart <= s < wend for s, e in spans)
+                any_in = any(s < wend and e > wstart for s, e in spans)
                 if fully_in:
                     kept.append(ev)
                 elif any_in:

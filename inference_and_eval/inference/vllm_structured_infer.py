@@ -86,9 +86,13 @@ to vLLM's `LLM.chat()` after this script's originally-targeted release;
 confirmed absent from vLLM 0.6.6.post1, present in 0.19.0), so this falls
 back to the template's own default with a printed note on an older
 install, the same pattern already used for
-StructuredOutputsParams/GuidedDecodingParams below. `"auto"` (the default)
-never passes `chat_template_kwargs` at all, so it's a no-op for any
-model/template that doesn't define `enable_thinking`.
+StructuredOutputsParams/GuidedDecodingParams below. `"auto"` never passes
+`chat_template_kwargs` at all, so it's a no-op for any model/template that
+doesn't define `enable_thinking`; `run()`'s own Python-level default
+(`enable_thinking=None`) is `"auto"`, but this file's own CLI defaults to
+`"false"` instead (explicitly disabling thinking via
+`chat_template_kwargs={"enable_thinking": False}`), since a Qwen3
+fine-tune trained without thinking tokens should be served the same way.
 """
 import argparse
 import json
@@ -120,6 +124,23 @@ DEFAULT_MAX_TOKENS = {
     # measured test+dev+train gold-target lengths (tiktoken cl100k):
     # p95=181, max=372.
     "sdoh_event_seq2seq": 1024,
+    # Tag-delimited seq2seq target (multitask/ner_re_medication_seq2seq_grammar.py) --
+    # more compact than ner_re_medication's JSON target for the same drug/attribute
+    # extraction; measured train+test gold-target lengths (tiktoken cl100k):
+    # p95=2641, max=3798.
+    "ner_re_medication_seq2seq": 4096,
+    # Tag-delimited seq2seq target (multitask/medication_event_seq2seq_grammar.py)
+    # -- no filler spans (closed-vocab attributes only), so much shorter
+    # than the JSON path; measured train+dev+test gold-target lengths
+    # (tiktoken cl100k): p95=861, max=1474.
+    "medication_event_seq2seq": 1536,
+    # Tag-delimited seq2seq target
+    # (multitask/concept_assertion_relation_seq2seq_grammar.py) -- more
+    # compact than concept_assertion_relation's JSON target (no per-concept
+    # id/array-of-objects overhead), but still dense (many concepts+relations
+    # per discharge summary); measured train+test gold-target lengths
+    # (tiktoken cl100k): p95=4701, max=8884.
+    "concept_assertion_relation_seq2seq": 12800,
 }
 _DEFAULT_MAX_TOKENS = 12800
 
@@ -139,6 +160,31 @@ _RETRYABLE_STATUSES = _BAD_STATUSES + ("truncated",)
 # across every task here.
 _TRUNCATION_RETRY_MULTIPLIER = 1.5
 _TRUNCATION_RETRY_CEILING = 32000
+
+# Retry temperatures for a repetition-loop ("repetitive" status) -- higher
+# than the default retry_temperature because a higher temperature is what
+# lets the model escape a greedy-decode loop, not just a different seed draw
+# (at temperature=0 it reproduces the identical loop). Index by attempt-1,
+# clamped to the last value for attempts beyond the tuple length.
+# repetition_penalty=1.05 is applied to these retries only (never the first
+# pass), so first-pass scores stay reproducible at the training-default
+# sampling settings.
+_REPEAT_RETRY_TEMPS = (0.5, 0.8)
+_REPEAT_RETRY_PENALTY = 1.05
+
+# Best-attempt ranking: when a retry produces a result, only keep it if it's
+# at least as good as what we already had. A hot retry (temperature=0.8) can
+# turn a salvaged partial extraction ("repetitive" with a usable prefix)
+# into bad_json, which scores 0 -- without this guard the retry would
+# overwrite the better earlier result. Lower rank = better.
+_STATUS_RANK = {"ok": 0, "violations": 1, "repetitive": 2, "surrogate": 3,
+                "truncated": 4, "bad_json": 5}
+
+
+def _better(new_status, old_status):
+    """True when a retry's `new_status` is at least as good as the existing
+    `old_status` -- i.e. worth replacing. See _STATUS_RANK."""
+    return _STATUS_RANK[new_status] <= _STATUS_RANK[old_status]
 
 
 def _load_examples(dataset, limit=None):
@@ -248,6 +294,103 @@ def _looks_repetitive(value):
         return False
 
     return (True, hit[0]) if _walk(value) else (False, None)
+
+
+def _tail_period(text, min_unit=24, min_repeats=5, scan_window=4000):
+    """Return the char-period p of a tail-repetition loop in `text`, or None.
+
+    A repetition loop looks like ...<real content><unit><unit><unit>... where
+    <unit> is a fixed string repeated back-to-back at least `min_repeats`
+    times and len(unit) >= `min_unit` (avoids flagging short JSON closing
+    tokens like `"}]}` repeating). This catches the degenerate loop
+    _looks_repetitive misses: an output that repeats the same drug dict
+    hundreds of times until max_tokens is never parsed as JSON (it's cut off
+    mid-array), so _looks_repetitive's >60%-duplicates-in-a-parsed-list check
+    never runs on it. _tail_period works on the raw text instead, so it
+    fires regardless of finish_reason.
+
+    Two-phase, phase-agnostic about where the loop's unit starts:
+      1. End-anchored: the last `min_repeats` p-blocks are identical. Catches
+         the common truncated-mid-loop case (max_tokens cuts the output
+         mid-unit, so the very tail is a clean repetition).
+      2. Char-periodic span: a contiguous span anywhere in the last
+         scan_window chars where tail[k]==tail[k-p] for every k, of length
+         >= p*min_repeats. Catches a loop that closed its JSON with a glued-on
+         closer or ends with a partial trailing unit (the end-anchored
+         blocks wouldn't then be identical).
+
+    Validated against every real IE task's gold test-split targets (3082
+    examples): 1 false positive (0.03%) -- a genuine 6x-repeated chemo
+    regimen in 2018_n2c2_track2_paragraph, not a model artifact. A false
+    positive here only costs a wasted hot retry (at temperature>0 it draws
+    something different; best-attempt keeping keeps the better earlier
+    result), matching _looks_repetitive's acceptance contract. min_repeats=5
+    is the smallest value that still detects real 6-copy loops while keeping
+    the FP rate near zero.
+    """
+    if not text:
+        return None
+    tail = text[-scan_window:]
+    n = len(tail)
+    if n < min_unit * min_repeats:
+        return None
+    # Phase 1: end-anchored.
+    for p in range(min_unit, min(scan_window, n // min_repeats) + 1):
+        unit = tail[-p:]
+        if all(tail[-p * (k + 1) : -p * k] == unit for k in range(1, min_repeats)):
+            return p
+    # Phase 2: char-periodic span anywhere in the tail.
+    for p in range(min_unit, min(scan_window, n // min_repeats) + 1):
+        lo = None
+        best_span = 0
+        for k in range(p, n):
+            if tail[k] == tail[k - p]:
+                if lo is None:
+                    lo = k - p
+                span = k + 1 - lo
+                if span > best_span:
+                    best_span = span
+            else:
+                lo = None
+        if best_span >= p * min_repeats:
+            return p
+    return None
+
+
+def _salvage_loop(text, p):
+    """Given `text` whose tail is a period-`p` repetition loop, return the
+    prefix before the loop started (the real extraction), or None if too
+    little real content remains. Strips trailing whole copies of the unit
+    (by p-char chunks from the end), then trims any partial trailing copy and
+    dangling punctuation. Conservative: only strips when the tail actually
+    matches the period, so a non-looping tail is returned unchanged (the
+    caller already confirmed a loop via _tail_period). Returns None when the
+    salvaged prefix is shorter than the loop unit (nothing real left), so the
+    caller falls back to the raw text rather than storing an empty prefix.
+
+    The salvage is a best-effort bonus, not the primary fix: when it returns a
+    prefix that isn't valid JSON (e.g. the loop ate the closing braces), that
+    prefix classifies as bad_json (rank 5) and -- via the best-attempt guard
+    -- does NOT overwrite a better earlier result; the hotter retry is what
+    actually escapes the loop. So an imperfect salvage is safe.
+    """
+    if not text or not p:
+        return None
+    unit = text[-p:]
+    i = len(text)
+    while i >= p and text[i - p : i] == unit:
+        i -= p
+    prefix = text[:i].rstrip()
+    while prefix.endswith(unit) or prefix.endswith(",") or prefix.endswith(" "):
+        if prefix.endswith(unit):
+            prefix = prefix[:-p].rstrip()
+        elif prefix.endswith(","):
+            prefix = prefix[:-1].rstrip()
+        else:
+            prefix = prefix.rstrip()
+    if len(prefix) < p:
+        return None
+    return prefix
 
 
 def _make_sampling_params(task, max_tokens, temperature=0.0, top_p=1.0, top_k=-1, extra_kwargs=None):
@@ -461,6 +604,18 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
     DEFAULT_MAX_TOKENS or a brand-new dataset that isn't yet. retries=0
     disables retry entirely (for both classes of defect).
 
+    VLLM_DEBUG=1 (env var, off by default) makes _batch_generate print a
+    per-chunk progress line before AND after each llm.chat() call, tagged
+    with the round (round0/retryN/fallbackN), the chunk index, the example
+    ids in the chunk, and per-example max_tokens. The "before" line is the
+    one that matters for a stuck run: a stalled llm.chat() blocks this
+    Python thread, so the LAST "START" line printed before the hang is the
+    exact chunk that's stuck -- tail the pod log and read up from it. The
+    "after" line reports wall-clock seconds and per-example finish_reasons,
+    so a chunk that returned but with every finish_reason=="length" (a
+    truncated-retry chunk running escalated max_tokens) is distinguishable
+    from a chunk that genuinely hung. Zero noise when unset.
+
     retry_temperature: temperature used for retry AND fallback attempts
     only -- the first attempt always uses `temperature`. Defaults to None,
     meaning "same as `temperature`". THIS MATTERS if you run with
@@ -511,11 +666,26 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
     def _max_tokens_for(task):
         return max_tokens if max_tokens is not None else DEFAULT_MAX_TOKENS.get(task, _DEFAULT_MAX_TOKENS)
 
-    def _bumped_max_tokens(task, attempt):
+    def _bumped_max_tokens(task, attempt, doc_id=None):
         """Escalated max_tokens for a truncated completion's retry -- see
         _RETRYABLE_STATUSES/_TRUNCATION_RETRY_MULTIPLIER above for why this
-        is needed instead of just resampling at the same budget."""
-        return min(int(_max_tokens_for(task) * (_TRUNCATION_RETRY_MULTIPLIER ** attempt)), _TRUNCATION_RETRY_CEILING)
+        is needed instead of just resampling at the same budget.
+
+        Clamped by the example's prompt length against the model's
+        max_model_len: max_model_len caps prompt+output TOGETHER, so an
+        escalated budget of ~32k output on top of a ~6.5k prompt
+        (2010_i2b2_va) would overshoot a 32768 max_model_len and vLLM would
+        reject the request. Falls back to the task's normal budget if the
+        clamped value would drop below it (never escalate downward), and to
+        the un-clamped bumped value if prompt_len/max_model_len aren't
+        known (older vLLM build / request without captured prompt len)."""
+        bumped = min(int(_max_tokens_for(task) * (_TRUNCATION_RETRY_MULTIPLIER ** attempt)), _TRUNCATION_RETRY_CEILING)
+        if doc_id is not None and doc_id in prompt_lens:
+            mml = getattr(getattr(getattr(llm, "llm_engine", None), "model_config", None),
+                           "max_model_len", None)
+            if mml:
+                bumped = min(bumped, mml - prompt_lens[doc_id])
+        return max(bumped, _max_tokens_for(task))
 
     chat_kwargs = {}
     if enable_thinking is not None:
@@ -530,6 +700,11 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
     fallback_used_ids = []  # doc_ids that needed the fallback model at all
     fallback_fixed_ids = []  # ...and the fallback model actually fixed
     still_bad_after_retry = []  # doc_ids retried (primary and/or fallback) AND still non-ok at the end
+    prompt_lens = {}  # doc_id -> prompt token count, captured in _batch_generate so
+    # _bumped_max_tokens can clamp a truncated retry's escalated budget by
+    # prompt length (max_model_len caps prompt+output together -- without
+    # this, a 2010_i2b2_va retry at 2.25x (~32k output) on a ~6.5k prompt
+    # would overshoot max_model_len and vLLM would reject the request).
 
     base_sampling_kwargs = dict(sampling_kwargs or {})
 
@@ -573,8 +748,22 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
         -- the classification half of what used to be _try_once. status in
         {"ok", "surrogate", "bad_json", "violations", "repetitive",
         "truncated"}; value is the parsed dict / raw text accordingly (a
-        tuple alongside extra info for "violations"/"repetitive")."""
+        tuple alongside extra info for "violations"/"repetitive").
+
+        A tail-repetition loop is checked FIRST, before the truncation
+        (finish_reason=="length") check: an output that loops until max_tokens
+        is cut off mid-loop and would otherwise be classified "truncated"
+        (then retried with MORE tokens, which just gives it more room to
+        loop) and stored as unparseable text (scores 0). Detecting the loop
+        on the raw text lets it be classified "repetitive" and retried hotter
+        (see _REPEAT_RETRY_TEMPS) at the normal budget instead, salvaging the
+        pre-loop prefix when there is one."""
         text = out.outputs[0].text
+        p = _tail_period(text)
+        if p is not None:
+            salvaged = _salvage_loop(text, p)
+            reason = f"repetition loop (unit {p} chars, finish_reason={out.outputs[0].finish_reason})"
+            return "repetitive", (salvaged if salvaged is not None else text, reason)
         if out.outputs[0].finish_reason == "length":
             return "truncated", text
         clean, had_surr = _strip_lone_surrogates(text)
@@ -597,7 +786,7 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
             return "repetitive", (parsed, reason)
         return "ok", parsed
 
-    def _batch_generate(use_llm, batch):
+    def _batch_generate(use_llm, batch, round_label=""):
         """batch: list of (ex, extra_kwargs, use_temperature, max_tokens_override)
         tuples. Builds every request and calls use_llm.chat() ONCE per chunk
         of at most `batch_size` examples (the whole batch in one call when
@@ -606,23 +795,68 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
         flight together instead of one request at a time (the previous
         per-example loop got none of that benefit: batch size 1 leaves the
         GPU idle between requests and lets one slow/degenerate example block
-        everything queued behind it). Returns {doc_id: (status, value)}."""
+        everything queued behind it). Returns {doc_id: (status, value)}.
+
+        round_label is only used for VLLM_DEBUG progress logging (see
+        run()'s docstring) -- the "round 0" pass vs "retry attempt N" are
+        distinguishable in the log so a stuck llm.chat() call can be
+        attributed to the right phase."""
         if not batch:
             return {}
         results = {}
         chunk_size = batch_size or len(batch)
-        for start in range(0, len(batch), chunk_size):
+        n_chunks = (len(batch) + chunk_size - 1) // chunk_size
+        import os
+        debug = bool(os.environ.get("VLLM_DEBUG"))
+        for chunk_idx, start in enumerate(range(0, len(batch), chunk_size)):
             chunk = batch[start:start + chunk_size]
             convs, sps = [], []
             for ex, extra_kwargs, use_temperature, max_tokens_override in chunk:
                 conv, sp = _build_request(ex, extra_kwargs, use_temperature, max_tokens_override)
                 convs.append(conv)
                 sps.append(sp)
+            # Per-chunk progress log, gated behind VLLM_DEBUG=1 so it's zero
+            # noise by default. The whole point: a stuck llm.chat() call
+            # blocks this Python thread until vLLM finishes (or hangs), so
+            # the LAST "start" line printed before the stall is the chunk
+            # that's actually stuck -- read the pod log's tail. Prints
+            # example id ranges and per-example max_tokens so a truncated-
+            # retry chunk's escalated budget (up to _TRUNCATION_RETRY_CEILING)
+            # is visible, not just the chunk index.
+            if debug:
+                ids = [ex["id"] for ex, _, _, _ in chunk]
+                mts = [sp.max_tokens for sp in sps]
+                label = f"[vllm-debug] {round_label}chunk {chunk_idx + 1}/{n_chunks}"
+                if len(ids) <= 4:
+                    print(f"{label} ids={ids} max_tokens={mts} (n={len(ids)})", flush=True)
+                else:
+                    print(
+                        f"{label} ids={ids[:2]}..{ids[-2:]} (n={len(ids)}) "
+                        f"max_tokens[min={min(mts)},max={max(mts)}]", flush=True,
+                    )
+                print(f"{label} -> llm.chat() START (this is the call that blocks)", flush=True)
+                import time as _t
+                _t0 = _t.time()
             if chat_kwargs and _supports_chat_template_kwargs:
                 outs = use_llm.chat(convs, sps, **chat_kwargs)
             else:
                 outs = use_llm.chat(convs, sps)
+            if debug:
+                print(
+                    f"{label} <- llm.chat() DONE in {_t.time() - _t0:.1f}s "
+                    f"(finish_reasons={[o.outputs[0].finish_reason for o in outs]})",
+                    flush=True,
+                )
             results.update({ex["id"]: _classify(ex, out) for (ex, _, _, _), out in zip(chunk, outs)})
+            # Capture each example's prompt token count for _bumped_max_tokens'
+            # max_model_len clamp. prompt_token_ids is a standard vLLM
+            # RequestOutput attribute; guard len() for older builds where it
+            # may be None, so the clamp just no-ops there (falls back to the
+            # un-clamped bumped budget).
+            for (ex, _, _, _), out in zip(chunk, outs):
+                ptids = getattr(out, "prompt_token_ids", None)
+                if ptids is not None:
+                    prompt_lens[ex["id"]] = len(ptids)
         return results
 
     by_id = {ex["id"]: ex for ex in examples}
@@ -630,41 +864,53 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
 
     # Round 0: every example, one batched call.
     for doc_id, (status, value) in _batch_generate(
-        llm, [(ex, base_sampling_kwargs, None, None) for ex in examples]
+        llm, [(ex, base_sampling_kwargs, None, None) for ex in examples], round_label="round0 ",
     ).items():
         statuses[doc_id], values[doc_id] = status, value
 
     # Retry rounds: re-draw only the ids still "obviously problematic"
     # (surrogate / bad_json / schema-violations / repetitive / truncated --
-    # all real generation defects worth a re-draw) with a fresh sample (seed
-    # + temperature bumped so vLLM actually draws something different), up
+    # all real generation defects worth a re-draw) with a fresh sample, up
     # to `retries` times, batched per round instead of per example -- each
-    # round's batch shrinks as examples clear. A truncated id additionally
-    # gets an escalated max_tokens (see _bumped_max_tokens) instead of the
-    # per-task default, since more room -- not a different draw -- is what
-    # actually gives a genuinely-long-but-otherwise-fine completion a chance
-    # to close its JSON; the other four defects keep the normal budget.
-    # Under this repo's contract every input/output is standard chars, so a
-    # lone surrogate / unparseable JSON / degenerate repetition is a real
-    # generation failure, not something to paper over -- a retry is the
-    # honest first response; the strip-and-store below (in the recording
-    # loop) is the last-resort fallback so one bad sample can't abort the
-    # whole run's write.
+    # round's batch shrinks as examples clear. Each failure type gets its own
+    # retry settings:
+    #   - repetitive (incl. a repetition loop salvaged from a truncated
+    #     output): retry HOTTER (_REPEAT_RETRY_TEMPS, 0.5 -> 0.8) with a mild
+    #     repetition_penalty=1.05, at the NORMAL budget. A higher
+    #     temperature is what lets the model escape a greedy-decode loop; more
+    #     tokens would just give it more room to loop. The penalty is retry-
+    #     only so first-pass scores stay reproducible.
+    #   - truncated (genuinely long, not a loop): retry at retry_temperature
+    #     with an escalated max_tokens (see _bumped_max_tokens, clamped by
+    #     prompt length vs max_model_len), since more room -- not a different
+    #     draw -- is what gives a long-but-fine completion room to close.
+    #   - other defects (surrogate / bad_json / violations): retry at
+    #     retry_temperature at the normal budget.
+    # A retry only REPLACES the stored result when it's at least as good
+    # (_better): a hot repetitive-retry that turns a salvaged partial into
+    # bad_json (scores 0) must not overwrite the better earlier salvage.
     for attempt in range(1, retries + 1):
         retry_ids = [doc_id for doc_id, s in statuses.items() if s in _RETRYABLE_STATUSES]
         if not retry_ids:
             break
         for doc_id in retry_ids:
             retry_counts[doc_id] = attempt
-        batch = [
-            (
-                by_id[doc_id], {**base_sampling_kwargs, "seed": attempt}, retry_temperature,
-                _bumped_max_tokens(by_id[doc_id]["task"], attempt) if statuses[doc_id] == "truncated" else None,
-            )
-            for doc_id in retry_ids
-        ]
-        for doc_id, (status, value) in _batch_generate(llm, batch).items():
-            statuses[doc_id], values[doc_id] = status, value
+        batch = []
+        for doc_id in retry_ids:
+            st = statuses[doc_id]
+            kw = {**base_sampling_kwargs, "seed": attempt}
+            if st == "repetitive":
+                temp = _REPEAT_RETRY_TEMPS[min(attempt, len(_REPEAT_RETRY_TEMPS)) - 1]
+                kw["repetition_penalty"] = _REPEAT_RETRY_PENALTY
+                mt = None
+            elif st == "truncated":
+                temp, mt = retry_temperature, _bumped_max_tokens(by_id[doc_id]["task"], attempt, doc_id)
+            else:
+                temp, mt = retry_temperature, None
+            batch.append((by_id[doc_id], kw, temp, mt))
+        for doc_id, (status, value) in _batch_generate(llm, batch, round_label=f"retry{attempt} ").items():
+            if _better(status, statuses[doc_id]):
+                statuses[doc_id], values[doc_id] = status, value
 
     # Escalate to the fallback model only for ids still bad after every
     # primary retry -- never runs for a sample the primary got right, so an
@@ -680,15 +926,22 @@ def run(dataset, model, backend="xgrammar", limit=None, max_tokens=None, out_pat
             remaining = [doc_id for doc_id in remaining if statuses[doc_id] in _RETRYABLE_STATUSES]
             if not remaining:
                 break
-            batch = [
-                (
-                    by_id[doc_id], {**base_sampling_kwargs, "seed": 1000 + fb_attempt}, retry_temperature,
-                    _bumped_max_tokens(by_id[doc_id]["task"], fb_attempt) if statuses[doc_id] == "truncated" else None,
-                )
-                for doc_id in remaining
-            ]
-            for doc_id, (status, value) in _batch_generate(fb_llm, batch).items():
-                statuses[doc_id], values[doc_id] = status, value
+            batch = []
+            for doc_id in remaining:
+                st = statuses[doc_id]
+                kw = {**base_sampling_kwargs, "seed": 1000 + fb_attempt}
+                if st == "repetitive":
+                    temp = _REPEAT_RETRY_TEMPS[min(fb_attempt, len(_REPEAT_RETRY_TEMPS)) - 1]
+                    kw["repetition_penalty"] = _REPEAT_RETRY_PENALTY
+                    mt = None
+                elif st == "truncated":
+                    temp, mt = retry_temperature, _bumped_max_tokens(by_id[doc_id]["task"], fb_attempt, doc_id)
+                else:
+                    temp, mt = retry_temperature, None
+                batch.append((by_id[doc_id], kw, temp, mt))
+            for doc_id, (status, value) in _batch_generate(fb_llm, batch, round_label=f"fallback{fb_attempt} ").items():
+                if _better(status, statuses[doc_id]):
+                    statuses[doc_id], values[doc_id] = status, value
         for doc_id in fallback_used_ids:
             if statuses[doc_id] not in _RETRYABLE_STATUSES:
                 fallback_fixed_ids.append(doc_id)
@@ -909,10 +1162,12 @@ def main():
     parser.add_argument(
         "--retries", type=int, default=2,
         help="how many times to re-draw an obviously-problematic sample in isolation "
-             "(lone surrogate / unparseable JSON / schema-violation / degenerate repetition) "
-             "before falling back to storing what it produced. Each retry bumps the sampling "
-             "seed; truncation is NOT retried (reproduces deterministically at the same "
-             "max_tokens). 0 disables retry.",
+             "(lone surrogate / unparseable JSON / schema-violation / degenerate repetition / "
+             "truncation) before falling back to storing what it produced. Each retry bumps the "
+             "sampling seed; a repetitive sample (incl. a repetition loop salvaged from a "
+             "truncated output) is retried hotter (see _REPEAT_RETRY_TEMPS) with a mild "
+             "repetition_penalty, and a truncated sample is retried with an escalated max_tokens "
+             "(clamped by prompt length vs max_model_len). 0 disables retry.",
     )
     parser.add_argument(
         "--retry-temperature", type=float, default=None,
