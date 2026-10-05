@@ -303,6 +303,44 @@ overlap with `Information_Extraction`):
   `multitask/hf_dataset_stats.py`) is an example-granularity/build property,
   also entirely within `Information_Extraction`.
 
+## Prompt design
+
+Every example is rendered from one fixed template, split across three chat
+roles — the same four pieces concatenate in the flat-text pipeline
+(`render`) and split across roles in the chat pipeline (`render_messages`),
+so the two can never drift:
+
+```
+system:    <<Category_Display: Task_Display>>
+           {generic category-level framing: "extract / classify / answer / rate /
+           summarize ..., and return them as the JSON the task-specific
+           instructions that follow specify"}
+user:      {dataset-specific instruction: full label set + JSON output schema}
+           INPUT: {input text}
+assistant: {JSON target matching the schema above}
+```
+
+Only the small, reusable **category-level framing** lives in the system turn
+— the part a decoder learns once across every task that shares an
+output-contract shape — while each dataset's **specific instruction (its full
+label set and JSON output schema) sits at the top of the user turn, immediately
+before `INPUT:`**, so the exact contract the model must satisfy is right next
+to the generation site rather than buried in a memorized system prompt. The
+instruction is tailored per dataset to what its target demands: closed-label
+tasks enumerate their entire vocabulary (NLI's
+`entailment`/`contradiction`/`neutral`, `cohort_eligibility`'s
+`met`/`not met`, MCQA's option letters); IE tasks spell out the entity types,
+attribute dimensions, and relation codes plus the JSON shape
+(`{"concepts": [{"id","type","text","assertion"}], "relations": [...]}`);
+free-text tasks state the literal output format (summarization's
+`"DISCHARGE INSTRUCTIONS:\n...\n\nBRIEF HOSPITAL COURSE:\n..."` header
+contract, abbreviation disambiguation's bare expansion). That output contract
+is declared once in `multitask/target_schema.py` — canonical key order, closed
+vocabularies, required keys — and drives both rendering and
+grammar-constrained decoding at inference, with `instruction_gaps()`
+cross-checking the prose against the spec so the label values a model has to
+produce can't silently drift between what it's told and what it's scored on.
+
 ## Data balance
 
 `build_unified_dataset.py` builds `train_unified.jsonl` by concatenating
