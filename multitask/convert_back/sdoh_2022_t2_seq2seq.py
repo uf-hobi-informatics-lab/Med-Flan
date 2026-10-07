@@ -29,7 +29,7 @@ from multitask import brat_scorer
 from multitask.seq2seq_grammar import parse_and_resolve_with_spans
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2022n2c2_track2"
+BASE = ROOT / "raw_datasets" / "2022n2c2_track2"
 
 
 def _gold_dir(source, split):

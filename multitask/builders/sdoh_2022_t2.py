@@ -24,7 +24,7 @@ from multitask.io_utils import read_text
 from multitask.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2022n2c2_track2"
+BASE = ROOT / "raw_datasets" / "2022n2c2_track2"
 SOURCES = ("mimic", "uw")
 
 

@@ -15,7 +15,8 @@ import numpy as np
 import pandas as pd
 import tiktoken
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
+RAW = ROOT / "raw_datasets"
 OUT_DIR = Path(__file__).resolve().parent
 
 warnings.filterwarnings("ignore")
@@ -284,14 +285,14 @@ def run_csv_gz_field_entry(paths, field_names, joiner=" "):
 # --------------------------------------------------------------------------
 # Dataset registry: (dataset, subset, task_type, format, run_fn)
 # --------------------------------------------------------------------------
-MEDQA_US = ROOT / "MedQA-USMLE/questions/US"
-MEDQA_ML = ROOT / "MedQA-USMLE/questions/Mainland"
-MEDQA_TW = ROOT / "MedQA-USMLE/questions/Taiwan"
-DISCHARGE = ROOT / "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3"
-N2C2_2018_T2 = ROOT / "2018_n2c2_track2"
-N2C2_2019_T2 = ROOT / "2019_n2c2_track2"
-N2C2_2022_T1 = ROOT / "2022n2c2_track1/trainingdata_v3"
-N2C2_2022_T2 = ROOT / "2022n2c2_track2/Track2_SubtaskA/Annotations"
+MEDQA_US = RAW / "MedQA-USMLE/questions/US"
+MEDQA_ML = RAW / "MedQA-USMLE/questions/Mainland"
+MEDQA_TW = RAW / "MedQA-USMLE/questions/Taiwan"
+DISCHARGE = RAW / "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3"
+N2C2_2018_T2 = RAW / "2018_n2c2_track2"
+N2C2_2019_T2 = RAW / "2019_n2c2_track2"
+N2C2_2022_T1 = RAW / "2022n2c2_track1/trainingdata_v3"
+N2C2_2022_T2 = RAW / "2022n2c2_track2/Track2_SubtaskA/Annotations"
 
 ENTRIES = []
 
@@ -302,7 +303,7 @@ def entry(dataset, subset, task_type, fmt, fn, *args, **kwargs):
 
 
 entry("MedNLI", "sentence pairs", "NLI", "jsonl", run_jsonl_entry,
-      [ROOT / "MedNLI/mednli-a-natural-language-inference-dataset-for-the-clinical-domain-1.0.0" / f
+      [RAW / "MedNLI/mednli-a-natural-language-inference-dataset-for-the-clinical-domain-1.0.0" / f
        for f in ("mli_train_v1.jsonl", "mli_dev_v1.jsonl", "mli_test_v1.jsonl")],
       nli_text)
 
@@ -319,37 +320,37 @@ entry("MedQA-USMLE-Taiwan", "question+options (zh-TW)", "MCQA", "jsonl", run_jso
       mcqa_text)
 
 entry("MedQA-USMLE-textbooks-en", "whole textbook", "raw corpus (long-form)", "txt", run_whole_files_entry,
-      sorted((ROOT / "MedQA-USMLE/textbooks/en").glob("*.txt")))
+      sorted((RAW / "MedQA-USMLE/textbooks/en").glob("*.txt")))
 
 entry("MedQA-USMLE-textbooks-zh", "whole textbook (zh)", "raw corpus (long-form)", "txt", run_whole_files_entry,
-      [ROOT / "MedQA-USMLE/textbooks/zh_paragraph/all_books.txt",
-       ROOT / "MedQA-USMLE/textbooks/zh_sentence/all_books.txt"])
+      [RAW / "MedQA-USMLE/textbooks/zh_paragraph/all_books.txt",
+       RAW / "MedQA-USMLE/textbooks/zh_sentence/all_books.txt"])
 
 entry("MMLU-Pro-Health", "question+options+cot", "MCQA", "arrow", run_arrow_entry,
-      ROOT / "MMLU-Pro-Health", mmlu_text)
+      RAW / "MMLU-Pro-Health", mmlu_text)
 
 entry("medmcqa", "question+options+explanation", "MCQA + explanation", "jsonl", run_jsonl_entry,
-      [ROOT / "medmcqa/raw" / f for f in ("train.json", "dev.json", "test.json")],
+      [RAW / "medmcqa/raw" / f for f in ("train.json", "dev.json", "test.json")],
       medmcqa_text)
 
 entry("pubmedqa", "question+contexts+long_answer", "QA / yes-no-maybe classification", "json-dict",
       run_json_dict_entry,
-      [ROOT / "pubmedqa/raw" / f for f in ("ori_pqaa.json", "dev_set.json", "test_set.json")],
+      [RAW / "pubmedqa/raw" / f for f in ("ori_pqaa.json", "dev_set.json", "test_set.json")],
       pubmedqa_text)
 
 entry("covid (LitCovid)", "title+abstract", "multi-label text classification", "csv", run_csv_entry,
-      [ROOT / "covid/raw" / f for f in ("BC7-LitCovid-Train.csv", "BC7-LitCovid-Dev.csv", "BC7-LitCovid-Test-GS.csv")],
+      [RAW / "covid/raw" / f for f in ("BC7-LitCovid-Train.csv", "BC7-LitCovid-Dev.csv", "BC7-LitCovid-Test-GS.csv")],
       title_abstract_text, ["title", "abstract"])
 
 entry("CORD-19-metadata", "title+abstract", "raw corpus / IR", "csv", run_csv_entry,
-      [ROOT / "2019_COVID_NLP/all_sources_metadata_2020-03-13.csv"],
+      [RAW / "2019_COVID_NLP/all_sources_metadata_2020-03-13.csv"],
       title_abstract_text, ["title", "abstract"])
 
 entry("CORD-19-fulltext", "full paper body text", "raw corpus / IR", "json", run_cord_fulltext_entry,
-      [ROOT / "2019_COVID_NLP/biorxiv_medrxiv/biorxiv_medrxiv",
-       ROOT / "2019_COVID_NLP/comm_use_subset/comm_use_subset",
-       ROOT / "2019_COVID_NLP/noncomm_use_subset/noncomm_use_subset",
-       ROOT / "2019_COVID_NLP/pmc_custom_license/pmc_custom_license"])
+      [RAW / "2019_COVID_NLP/biorxiv_medrxiv/biorxiv_medrxiv",
+       RAW / "2019_COVID_NLP/comm_use_subset/comm_use_subset",
+       RAW / "2019_COVID_NLP/noncomm_use_subset/noncomm_use_subset",
+       RAW / "2019_COVID_NLP/pmc_custom_license/pmc_custom_license"])
 
 for split in ("train", "valid", "test_phase_1", "test_phase_2"):
     entry("discharge-me", f"{split}: discharge note text", "summarization", "csv.gz", run_csv_gz_field_entry,
@@ -362,7 +363,7 @@ for split in ("train", "valid", "test_phase_1", "test_phase_2"):
 
 entry("2018_n2c2_track1", "note <TEXT>", "text classification (cohort eligibility)", "xml",
       run_n2c2_2018_track1_entry,
-      [ROOT / "2018_n2c2_track1/train", ROOT / "2018_n2c2_track1/test_notags"])
+      [RAW / "2018_n2c2_track1/train", RAW / "2018_n2c2_track1/test_notags"])
 
 entry("2018_n2c2_track2", "clinical note text", "NER + RE (ADE / medication)", "txt", run_whole_files_entry,
       sorted((N2C2_2018_T2 / "2018n2c2_track2_training").glob("*.txt")) +
@@ -370,7 +371,7 @@ entry("2018_n2c2_track2", "clinical note text", "NER + RE (ADE / medication)", "
 
 entry("2019_n2c2_track1", "sentence1+sentence2", "semantic textual similarity (regression)", "tsv-in-txt",
       run_sts_entry,
-      [ROOT / "2019_n2c2_track1" / f for f in ("clinicalSTS2019.train.txt", "clinicalSTS2019.test.txt")])
+      [RAW / "2019_n2c2_track1" / f for f in ("clinicalSTS2019.train.txt", "clinicalSTS2019.test.txt")])
 
 entry("2019_n2c2_track2", "clinical note text", "NER + attribute/relation extraction (family history)", "txt",
       run_whole_files_entry,

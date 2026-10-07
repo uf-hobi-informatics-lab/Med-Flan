@@ -5,22 +5,27 @@ deterministic sample is carved regardless of which pipeline runs.
 """
 import random
 
-DEV_FRAC = 0.3
+# Fraction of *train* held out as a monitoring-only dev set when a dataset
+# ships no released dev split. A 9:1 train:dev ratio -> 10% of train becomes
+# dev; those rows are removed from train (disjoint), so unlike the earlier
+# test-carve the dev sample no longer overlaps the final eval split.
+DEV_FRAC = 0.1
 DEV_SEED = 13
 
 
-def carve_dev_from_test(test_examples, frac=DEV_FRAC, seed=DEV_SEED):
-    """Deterministically sample `frac` of `test_examples` to stand in as a
-    monitoring-only dev set for a dataset with no released dev split.
+def carve_dev_from_train(train_examples, frac=DEV_FRAC, seed=DEV_SEED):
+    """Deterministically split `train_examples` into (train, dev) with a
+    9:1 ratio for datasets that ship no released dev split.
 
-    The sample overlaps test rather than being removed from it -- the
-    original test set is left intact so per-task scoring still runs against
-    the full, official test split; only merged/joint-training monitoring
-    ever sees this carved dev sample.
+    The carve is disjoint: the dev rows are removed from train (the returned
+    train is the remaining 90%), so train and dev never overlap. The official
+    test split is left entirely untouched for per-task scoring.
     """
-    items = list(test_examples)
+    items = list(train_examples)
     order = list(range(len(items)))
     random.Random(seed).shuffle(order)
     n_dev = round(len(items) * frac)
-    dev_idx = sorted(order[:n_dev])
-    return [items[i] for i in dev_idx]
+    dev_idx = set(order[:n_dev])
+    dev = [items[i] for i in sorted(order[:n_dev])]
+    train = [items for k, items in enumerate(items) if k not in dev_idx]
+    return train, dev

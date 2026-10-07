@@ -53,7 +53,7 @@ from multitask.builders.simple_tasks import (
     build_mednli, build_mmlu_pro_health, build_nli4ct, build_pubmedqa, build_umn_abbreviation,
 )
 from multitask.builders.sts_2019_t1 import build_sts, build_sts_classification
-from multitask.split_utils import carve_dev_from_test
+from multitask.split_utils import carve_dev_from_train
 
 OUT_DIR = Path(__file__).resolve().parent / "huggingface_format"
 
@@ -196,12 +196,14 @@ def _build_and_save(name, examples_by_split, splits, messages_key):
         ds = _build_split(examples_by_split[split], messages_key)
         if ds is not None and len(ds) > 0:
             split_datasets[split] = ds
-    # No released dev split -- carve a monitoring-only dev sample out of
-    # test instead (overlaps test; test itself is left unchanged so
-    # per-task scoring still runs against the full, official test set).
-    if "dev" not in splits and "train" in split_datasets and "test" in split_datasets:
-        dev_rows = carve_dev_from_test(split_datasets["test"].to_list())
+    # No released dev split -- carve a monitoring-only dev sample out of *train*
+    # with a 9:1 ratio instead (disjoint: dev rows are removed from train, so
+    # train and dev never overlap; the official test split stays untouched for
+    # per-task scoring).
+    if "dev" not in splits and "train" in split_datasets:
+        trimmed_train, dev_rows = carve_dev_from_train(split_datasets["train"].to_list())
         if dev_rows:
+            split_datasets["train"] = Dataset.from_list(trimmed_train)
             split_datasets["dev"] = Dataset.from_list(dev_rows)
     if not split_datasets:
         print(f"[skip] {name}: no data found", file=sys.stderr)

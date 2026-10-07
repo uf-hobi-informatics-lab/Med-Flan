@@ -56,7 +56,7 @@ from inference_and_eval.reanchor import reanchor
 from inference_and_eval.target_schema import CMED_ATTR_NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
-GOLD_DIR = ROOT / "2022n2c2_track1" / "test"
+GOLD_DIR = ROOT / "raw_datasets" / "2022n2c2_track1" / "test"
 
 ATTR_NAMES = CMED_ATTR_NAMES
 

@@ -18,7 +18,7 @@ from pathlib import Path
 from multitask.schemas import COHORT_CRITERIA, cohort_criterion_prompt, example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2018_n2c2_track1"
+BASE = ROOT / "raw_datasets" / "2018_n2c2_track1"
 SPLIT_DIRS = {"train": BASE / "train", "test": BASE / "n2c2-t1_gold_standard_test_data" / "test"}
 
 _CDATA_STRIP_RE = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)

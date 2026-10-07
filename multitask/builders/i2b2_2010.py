@@ -39,7 +39,7 @@ from multitask.io_utils import read_text
 from multitask.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2010i2b2"
+BASE = ROOT / "raw_datasets" / "2010i2b2"
 SPLIT_DIRS = {
     "train": [BASE / "concept_assertion_relation_training_data"],
     "test": [BASE / "reference_standard_for_test_data", BASE / "test_data"],

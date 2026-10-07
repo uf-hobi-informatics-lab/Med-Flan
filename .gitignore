@@ -18,114 +18,116 @@ __pycache__/
 # either.
 .scratch*/
 
-# --- Dataset raw data (see README.md "Data Sources" to download; see sample_data/ for previews) ---
+# --- Dataset raw data (see README.md "Data Sources" to download; see raw_datasets/sample_data/ for previews) ---
 
 # 2018_n2c2_track1
-2018_n2c2_track1/train/
-2018_n2c2_track1/test_notags/
-2018_n2c2_track1/n2c2-t1_gold_standard_test_data/
-2018_n2c2_track1/zip/
+raw_datasets/2018_n2c2_track1/train/
+raw_datasets/2018_n2c2_track1/test_notags/
+raw_datasets/2018_n2c2_track1/n2c2-t1_gold_standard_test_data/
+raw_datasets/2018_n2c2_track1/zip/
 
 # 2018_n2c2_track2
-2018_n2c2_track2/2018n2c2_test_data_Task1/
-2018_n2c2_track2/2018n2c2_test_data_Task2/
-2018_n2c2_track2/2018n2c2_track2_training/
-2018_n2c2_track2/gold_standard_test/
-2018_n2c2_track2/sample_data/
+raw_datasets/2018_n2c2_track2/2018n2c2_test_data_Task1/
+raw_datasets/2018_n2c2_track2/2018n2c2_test_data_Task2/
+raw_datasets/2018_n2c2_track2/2018n2c2_track2_training/
+raw_datasets/2018_n2c2_track2/gold_standard_test/
+raw_datasets/2018_n2c2_track2/sample_data/
 
 # 2019_COVID_NLP
-2019_COVID_NLP/*.csv
-2019_COVID_NLP/*.zip
-2019_COVID_NLP/*.readme
-2019_COVID_NLP/pmc_custom_license/
-2019_COVID_NLP/noncomm_use_subset/
-2019_COVID_NLP/biorxiv_medrxiv/
-2019_COVID_NLP/comm_use_subset/
+raw_datasets/2019_COVID_NLP/*.csv
+raw_datasets/2019_COVID_NLP/*.zip
+raw_datasets/2019_COVID_NLP/*.readme
+raw_datasets/2019_COVID_NLP/pmc_custom_license/
+raw_datasets/2019_COVID_NLP/noncomm_use_subset/
+raw_datasets/2019_COVID_NLP/biorxiv_medrxiv/
+raw_datasets/2019_COVID_NLP/comm_use_subset/
 
 # 2019_n2c2_track1
-2019_n2c2_track1/clinicalSTS2019.train.v2.txt
-2019_n2c2_track1/clinicalSTS2019.train.txt
-2019_n2c2_track1/clinicalSTS2019.test.txt
-2019_n2c2_track1/clinicalSTS2019.test.gs.sim.txt
+raw_datasets/2019_n2c2_track1/clinicalSTS2019.train.v2.txt
+raw_datasets/2019_n2c2_track1/clinicalSTS2019.train.txt
+raw_datasets/2019_n2c2_track1/clinicalSTS2019.test.txt
+raw_datasets/2019_n2c2_track1/clinicalSTS2019.test.gs.sim.txt
 
 # 2019_n2c2_track2
-2019_n2c2_track2/*.tsv
-2019_n2c2_track2/bioc-FH-training/
-2019_n2c2_track2/bioc-FH-testing/
+raw_datasets/2019_n2c2_track2/*.tsv
+raw_datasets/2019_n2c2_track2/bioc-FH-training/
+raw_datasets/2019_n2c2_track2/bioc-FH-testing/
 
 # 2022n2c2_track1
-2022n2c2_track1/trainingdata_v3/train/
-2022n2c2_track1/trainingdata_v3/dev/
-2022n2c2_track1/archive/
-2022n2c2_track1/test/
+raw_datasets/2022n2c2_track1/trainingdata_v3/train/
+raw_datasets/2022n2c2_track1/trainingdata_v3/dev/
+raw_datasets/2022n2c2_track1/archive/
+raw_datasets/2022n2c2_track1/test/
 
 # 2022n2c2_track2
-2022n2c2_track2/Track2_SubtaskA/
-2022n2c2_track2/Track2_SubtaskA.zip
-2022n2c2_track2/train/
-2022n2c2_track2/dev/
-2022n2c2_track2/test/
-2022n2c2_track2/annotation.conf
-2022n2c2_track2/tools.conf
-2022n2c2_track2/visual.conf
+raw_datasets/2022n2c2_track2/Track2_SubtaskA/
+raw_datasets/2022n2c2_track2/Track2_SubtaskA.zip
+raw_datasets/2022n2c2_track2/train/
+raw_datasets/2022n2c2_track2/dev/
+raw_datasets/2022n2c2_track2/test/
+raw_datasets/2022n2c2_track2/annotation.conf
+raw_datasets/2022n2c2_track2/tools.conf
+raw_datasets/2022n2c2_track2/visual.conf
 
 # MMLU-Pro-Health
-MMLU-Pro-Health/*.arrow
-MMLU-Pro-Health/dataset_info.json
-MMLU-Pro-Health/state.json
+raw_datasets/MMLU-Pro-Health/*.arrow
+raw_datasets/MMLU-Pro-Health/dataset_info.json
+raw_datasets/MMLU-Pro-Health/state.json
 
 # MedNLI
-MedNLI/**/*.jsonl
+raw_datasets/MedNLI/**/*.jsonl
 
-# MedQA-USMLE
-MedQA-USMLE/
+# MedQA-USMLE -- keep the folder tracked (via .gitkeep) but ignore all files
+# under it (DUA-gated). Same policy intent as 2010i2b2 below, but no
+# annotation-guideline PDFs to preserve here.
+raw_datasets/MedQA-USMLE/*
+!raw_datasets/MedQA-USMLE/.gitkeep
 
 # covid
-covid/raw/*.csv
+raw_datasets/covid/raw/*.csv
 
 # discharge-me
-discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/
-discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/
-discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/
-discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/
+raw_datasets/discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/train/
+raw_datasets/discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/valid/
+raw_datasets/discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_1/
+raw_datasets/discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3/test_phase_2/
 
 # medmcqa / medqa / pubmedqa
-medmcqa/raw/
-medqa/raw/
-pubmedqa/raw/
+raw_datasets/medmcqa/raw/
+raw_datasets/medqa/raw/
+raw_datasets/pubmedqa/raw/
 
 # multitask (generated from the above; see multitask/builders/)
 multitask/data/
 multitask/huggingface_format/
 
 # dataset_stats
-dataset_stats/*.log
+raw_datasets/dataset_stats/*.log
 
 # semeval_2015 (SemEval-2015 Task 14 disorder recognition, ShARe/MIMIC-derived)
-semeval_2015/train/
-semeval_2015/test/
+raw_datasets/semeval_2015/train/
+raw_datasets/semeval_2015/test/
 
 # umn_abbreviation (UMN Clinical Abbreviation & Acronym Sense Inventory)
-umn_abbreviation/raw/
+raw_datasets/umn_abbreviation/raw/
 
 # 2010i2b2 (Concepts, Assertions, and Relations in Clinical Text) --
-# DUA-gated. See multitask/builders/i2b2_2010.py's docstring for the
-# expected layout (train from concept_assertion_relation_training_data.tar.gz,
-# test from reference_standard_for_test_data.tar.gz + test_data.tar.gz).
-2010i2b2/
+# DUA-gated. Keep the folder and its annotation-guideline PDFs tracked; ignore
+# the raw data (concept/assertion/relation/txt + tar.gz archives). See
+# multitask/builders/i2b2_2010.py's docstring for the expected layout (train
+# from concept_assertion_relation_training_data.tar.gz, test from
+# reference_standard_for_test_data.tar.gz + test_data.tar.gz).
+raw_datasets/2010i2b2/*
+!raw_datasets/2010i2b2/*.pdf
 
 # nli4ct (SemEval-2023 Task 7 NLI4CT)
-nli4ct/raw/
+raw_datasets/nli4ct/raw/
 
 # bionli
-bionli/raw/
+raw_datasets/bionli/raw/
 
 # emrqa-msquad
-emrqa-msquad/raw/
-
-# sample_data/semeval_2015
-sample_data/semeval_2015/train/
-sample_data/semeval_2015/test/
+raw_datasets/emrqa-msquad/raw/
 
 CLAUDE.md
 .claude

@@ -17,11 +17,11 @@ from inference_and_eval.schemas import example
 from inference_and_eval.target_schema import CMED_ATTR_NAMES
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2022n2c2_track1/trainingdata_v3"
+BASE = ROOT / "raw_datasets" / "2022n2c2_track1/trainingdata_v3"
 SPLIT_DIRS = {
     "train": BASE / "train",
     "dev": BASE / "dev",
-    "test": ROOT / "2022n2c2_track1" / "test",
+    "test": ROOT / "raw_datasets" / "2022n2c2_track1" / "test",
 }
 
 ATTR_NAMES = CMED_ATTR_NAMES

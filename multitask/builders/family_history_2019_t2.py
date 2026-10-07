@@ -46,7 +46,7 @@ from multitask.io_utils import read_text
 from multitask.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2019_n2c2_track2"
+BASE = ROOT / "raw_datasets" / "2019_n2c2_track2"
 SPLIT_FILES = {
     "train": {"subtask1": BASE / "train_subtask1_2.tsv", "subtask2": BASE / "train_subtask2_2.tsv"},
     "test": {"subtask1": BASE / "test_subtask1.tsv", "subtask2": BASE / "test_subtask2.tsv"},

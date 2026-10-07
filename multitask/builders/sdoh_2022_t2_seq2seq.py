@@ -48,7 +48,7 @@ from multitask.schemas import example
 from multitask.seq2seq_grammar import serialize_events
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2022n2c2_track2"
+BASE = ROOT / "raw_datasets" / "2022n2c2_track2"
 
 
 def _split_dir(source, split):

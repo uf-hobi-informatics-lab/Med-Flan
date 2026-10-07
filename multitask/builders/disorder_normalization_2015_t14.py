@@ -21,7 +21,7 @@ from multitask.io_utils import read_text
 from multitask.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "semeval_2015"
+BASE = ROOT / "raw_datasets" / "semeval_2015"
 
 
 def _parse_span(span_field):

@@ -25,8 +25,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-EVAL_SCRIPT = ROOT / "2019_n2c2_track1" / "correlation-noconfidence.pl"
-GOLD_SCORES = ROOT / "2019_n2c2_track1" / "clinicalSTS2019.test.gs.sim.txt"
+EVAL_SCRIPT = ROOT / "raw_datasets" / "2019_n2c2_track1" / "correlation-noconfidence.pl"
+GOLD_SCORES = ROOT / "raw_datasets" / "2019_n2c2_track1" / "clinicalSTS2019.test.gs.sim.txt"
 
 _FLOAT_RE = re.compile(r"-?\d+(?:\.\d+)?")
 

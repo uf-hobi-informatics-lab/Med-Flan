@@ -94,7 +94,7 @@ from multitask.reanchor import _flex_pattern, reanchor
 from multitask.target_schema import MEDICATION_ATTR_TYPES
 
 ROOT = Path(__file__).resolve().parents[2]
-GOLD_DIR = ROOT / "2018_n2c2_track2" / "gold_standard_test"
+GOLD_DIR = ROOT / "raw_datasets" / "2018_n2c2_track2" / "gold_standard_test"
 
 ATTR_TYPES = MEDICATION_ATTR_TYPES
 

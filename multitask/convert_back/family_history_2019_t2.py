@@ -32,8 +32,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-EVAL_SCRIPT = ROOT / "2019_n2c2_track2" / "eval.py"
-GOLD_S2 = ROOT / "2019_n2c2_track2" / "test_subtask2.tsv"
+EVAL_SCRIPT = ROOT / "raw_datasets" / "2019_n2c2_track2" / "eval.py"
+GOLD_S2 = ROOT / "raw_datasets" / "2019_n2c2_track2" / "test_subtask2.tsv"
 
 
 def to_subtask2_lines(predictions):

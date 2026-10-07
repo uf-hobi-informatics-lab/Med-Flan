@@ -30,7 +30,7 @@ from inference_and_eval.builders.disorder_normalization_2015_t14 import _iter_do
 from inference_and_eval.reanchor import reanchor
 
 ROOT = Path(__file__).resolve().parents[2]
-GOLD_DIR = ROOT / "semeval_2015"
+GOLD_DIR = ROOT / "raw_datasets" / "semeval_2015"
 
 
 def _examples_with_raw_target(split):

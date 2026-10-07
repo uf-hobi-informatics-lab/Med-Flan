@@ -219,7 +219,7 @@ venue/year/author-order details may need correction:
 | `qa_yesnomaybe` | pubmedqa | `multitask/eval/simple_tasks.py` (exact match) | ✅ verified |
 | `multilabel_cls` | covid (LitCovid) | `multitask/eval/simple_tasks.py` (micro P/R/F1) | ✅ verified |
 | `summarization` | discharge-me | `multitask/eval/discharge_me.py` — ROUGE-1/2/L + BLEU (+ optional BERTScore), macro-averaged over the two target sections | ✅ verified (partial metric — see note below). Self-check on 25 gold samples: ROUGE-1/2/L = 1.0, BLEU ≈ 100 |
-| `abbreviation_disambiguation` | umn_abbreviation | `multitask/eval/simple_tasks.py` (exact match) | ✅ verified |
+| `abbreviation_disambiguation` | umn_abbreviation | `multitask/eval/simple_tasks.py` (accuracy + macro P/R/F1) | ✅ verified |
 | `disorder_normalization` | semeval_2015 (SemEval-2015 Task 14 / ShARe) | `multitask/convert_back/disorder_normalization_2015_t14.py` — **self-implemented** strict F (exact span + CUI) and relaxed F (word-overlap + CUI), per Elhadad et al. 2015 §4.1; no persistent public official scorer found | ✅ verified. Gold round-trip: Strict F1 = 0.9150, Relaxed F1 = 1.0. Strict is no longer trivially 1.0 — gold now scores against its real offsets instead of being reanchored through the same lossy path as predictions, see note below. Not an official binary |
 | `concept_assertion_relation` | 2010_i2b2_va | `multitask/convert_back/i2b2_2010.py` — **self-implemented** concept/relation P/R/F1 + assertion accuracy (no official scorer ships with this release) | ✅ verified. Gold round-trip on the real test split (256 docs): assertion accuracy = relation F1 = 1.0; concept F1 = 0.9996 (not exact — see the module docstring's "Known limitation": ~13/2600 concepts are short, repeated tokens like "T"/"P"/"rate" that reanchor's greedy matching can't disambiguate from text alone, an inherent ceiling any generative model's plain-text output shares) |
 | `qa_span_extraction` | emrqa-msquad | `multitask/eval/qa_span.py` — **self-implemented** SQuAD-style normalized exact-match + token-F1, the metric the paper itself reports; no persistent official scorer ships with the Hub release | ✅ verified. Gold round-trip on the real `dev` split (n=32,739): exact_match = f1 = 1.0. **Uses `dev` (HF's `validation`) as the eval split** — the Hub release ships no `test` split, same fallback as `medmcqa` |
@@ -358,31 +358,31 @@ volume:**
 | discharge-me | summarization | 68,785 | 588 | 4088.0 | 4303.9 | 20469 | 296.0M |
 | pubmedqa | qa_yesnomaybe | 211,269 | 94 | 445.0 | 449.7 | 1671 | 95.0M |
 | medmcqa | mcqa_explain | 182,822 | 70 | 170.0 | 207.9 | 5419 | 38.0M |
-| 2018_n2c2_track1 (cohort_eligibility) | cohort_eligibility | 2,626 | 1748 | 5096.5 | 5401.3 | 15312 | 14.2M |
+| 2018_n2c2_track1 (cohort_eligibility) | cohort_eligibility | 2,363 | 1798 | 5159 | 5477.8 | 15362 | 13.0M |
 | covid_LitCovid | multilabel_cls | 24,960 | 47 | 332.0 | 343.5 | 2063 | 8.6M |
 | MedQA-USMLE-Mainland | mcqa | 27,400 | 73 | 151.0 | 168.6 | 687 | 4.6M |
 | umn_abbreviation | abbreviation_disambiguation | 19,257 | 86 | 162.0 | 166.2 | 1004 | 3.2M |
 | MedQA-USMLE-US | mcqa | 10,178 | 86 | 236.5 | 247.5 | 941 | 2.5M |
 | MedQA-USMLE-Taiwan | mcqa | 11,298 | 72 | 182.0 | 200.7 | 1349 | 2.3M |
 | bionli | nli | 5,544 | 108 | 389.0 | 395.7 | 1454 | 2.2M |
-| 2018_n2c2_track2 (Drug-ADE) | ner_re_medication | 303 | 376 | 5135.0 | 5463.5 | 17404 | 1.7M |
+| 2018_n2c2_track2 (Drug-ADE) | ner_re_medication | 273 | 643 | 5400 | 5688.3 | 12727 | 1.6M |
 | nli4ct | nli | 1,700 | 73 | 439.0 | 521.7 | 2786 | 0.89M |
 | MedNLI | nli | 11,232 | 52 | 74.0 | 78.8 | 393 | 0.89M |
 | 2022n2c2_track2_uw (SHAC, UW subset) | sdoh_event | 1,751 | 57 | 477.0 | 496.6 | 1589 | 0.87M |
 | 2022n2c2_track1 (CMED) | medication_event | 350 | 286 | 1494.0 | 1902.2 | 8352 | 0.67M |
 | 2022n2c2_track2_mimic (SHAC, MIMIC subset) | sdoh_event | 1,316 | 56 | 485.5 | 496.3 | 1592 | 0.65M |
-| semeval_2015 (SemEval-2015 T14) | disorder_normalization | 298 | 160 | 1304.5 | 1985.1 | 7242 | 0.59M |
-| 2019_n2c2_track1_cls (Clinical STS, derived) | sts_classification | 1,654 | 200 | 232.0 | 241.3 | 458 | 0.40M |
-| 2019_n2c2_track1 (Clinical STS) | sts_regression | 1,654 | 92 | 123.0 | 132.9 | 349 | 0.22M |
-| 2019_n2c2_track2 (family history) | family_history | 99 | 282 | 786.0 | 869.1 | 2418 | 0.09M |
+| semeval_2015 (SemEval-2015 T14) | disorder_normalization | 268 | 215 | 1426.5 | 2071.3 | 7297 | 0.56M |
+| 2019_n2c2_track1_cls (Clinical STS, derived) | sts_classification | 1,489 | 209 | 241 | 250.3 | 467 | 0.37M |
+| 2019_n2c2_track1 (Clinical STS) | sts_regression | 1,489 | 141 | 172 | 181.9 | 398 | 0.27M |
+| 2019_n2c2_track2 (family history) | family_history | 88 | 450 | 907.0 | 962.3 | 2320 | 0.08M |
 | MMLU-Pro-Health | mcqa | 0 (test-only, 823) | 70 | 165.0 | 183.6 | 1084 | 0 |
 
 Total ≈ 474M train tokens across ~585K examples.
 
 **Two distinct, compounding imbalances:**
 
-1. **Example-count imbalance**: pubmedqa (211,269) vs. family_history (99)
-   ≈ **2,134:1**. The eight datasets that are the paper's core clinically-rich
+1. **Example-count imbalance**: pubmedqa (211,269) vs. family_history (88)
+   ≈ **2,401:1**. The eight datasets that are the paper's core clinically-rich
    extraction/regression tasks (`cohort_eligibility`, `ner_re_medication`,
    `sts_regression`, `family_history`, `medication_event`,
    `sdoh_event` (mimic + uw), `disorder_normalization`) each have well under
@@ -392,13 +392,13 @@ Total ≈ 474M train tokens across ~585K examples.
    the two new NLI datasets (`bionli` 5,544; `nli4ct` 1,700) also land toward
    the smaller end, well below the QA/classification/summarization tier.
 2. **Token-volume imbalance is worse than example count suggests**, because
-   average document length varies ~69x across datasets (2018_n2c2_track2's
-   mean 5463.5 tokens vs. MedNLI's mean 78.8). `discharge-me`
+   average document length varies ~41x across datasets (2018_n2c2_track2's
+   mean 5688.3 tokens vs. MedNLI's mean 139.8). `discharge-me`
    alone is **~296M tokens — about 63% of the entire merged training set's
    token volume**. `pubmedqa` + `medmcqa` + `discharge-me` together are
    **~91% of all training tokens**, while the eight small extraction/
    regression datasets above sum to only **~18.9M tokens (~4%)**.
-   `family_history` alone is ~0.09M tokens — **0.02% of total training
+   `family_history` alone is ~0.08M tokens — **0.02% of total training
    volume** — despite being one of the paper's core benchmark tasks.
 
 **Secondary observations:**
@@ -409,7 +409,7 @@ Total ≈ 474M train tokens across ~585K examples.
   three MedQA variants only.
 - `cohort_eligibility` already has a **13x per-example amplification** in
   its builder (one training example per criterion per patient, 288 patients
-  → 2,626+1,118 examples) — an existing precedent for turning a small
+  → 2,363+1,118 examples) — an existing precedent for turning a small
   document-level dataset into more single-signal examples.
 - `cohort_eligibility` also already flags **within-task** class imbalance
   (`COHORT_CRITERIA_RARE` in `multitask/schemas.py`: MI-6MOS, KETO-1YR,
@@ -502,7 +502,8 @@ Combined F1 0.9479, SHAC mimic Combined F1 0.9862 /
 uw Combined F1 0.9872, the uw derived-relations auxiliary axis F1 0.9826, STS
 Pearson r = 1.0000, cohort_eligibility 1.0 except the documented KETO-1YR
 artifact, discharge-me perfect ROUGE/BLEU on the full 10,962-row test split,
-semeval_2015 strict F1 0.9150 / relaxed F1 1.0, umn_abbreviation accuracy 1.0,
+semeval_2015 strict F1 0.9150 / relaxed F1 1.0, umn_abbreviation accuracy =
+macro_precision = macro_recall = macro_f1 = 1.0,
 MedNLI/bionli/nli4ct accuracy 1.0) — the dispatcher itself introduces no
 discrepancy versus calling each module directly.
 
@@ -875,22 +876,22 @@ Stats below (example counts, tiktoken `cl100k_base` token-length of the full ren
 
 | dataset | category | task tag | description | train | dev | test | tk_min (train) | tk_median (train) | tk_mean (train) | tk_max (train) | tk_min (dev) | tk_median (dev) | tk_mean (dev) | tk_max (dev) | tk_min (test) | tk_median (test) | tk_mean (test) | tk_max (test) |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2010_i2b2_va | information_extraction | concept_assertion_relation | Extract all problem/test/treatment concepts; for each problem concept also give its assertion status (present, absent, possible, conditional, hypothetical, or associated_with_someone_else); and extract the relations between concepts, one of: TrIP (treatment improves problem), TrWP (treatment worsens problem), TrCP (treatment causes problem), TrAP (treatment administered for problem, outcome not stated), TrNAP (treatment NOT administered because of problem), TeRP (test reveals problem), TeCP (test conducted to investigate problem, outcome not known), PIP (one problem indicates/causes another). Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}. | 170 | 77 | 256 | 273 | 4077.0 | 4740.5 | 19611 | 576 | 4673.0 | 5484.0 | 14100 | 474 | 5115.5 | 5813.8 | 23982 |
+| 2010_i2b2_va | information_extraction | concept_assertion_relation | Extract all problem/test/treatment concepts; for each problem concept also give its assertion status (present, absent, possible, conditional, hypothetical, or associated_with_someone_else); and extract the relations between concepts, one of: TrIP (treatment improves problem), TrWP (treatment worsens problem), TrCP (treatment causes problem), TrAP (treatment administered for problem, outcome not stated), TrNAP (treatment NOT administered because of problem), TeRP (test reveals problem), TeCP (test conducted to investigate problem, outcome not known), PIP (one problem indicates/causes another). Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}. | 153 | 17 | 256 | 523 | 4489 | 5076.0 | 19861 | 885 | 3997 | 4221.6 | 8538 | 724 | 5365.5 | 6063.8 | 24232 |
 | 2010_i2b2_va_ner_only | information_extraction | concept_assertion_relation_ner_only | Extract every problem, test, and treatment concept mention span in the text -- concepts only, no assertion classification, no relation linking. Return JSON {"concepts": [{"type": ..., "text": ...}, ...]}. | 170 | - | - | 155 | 2579.5 | 2884.3 | 12173 | - | - | - | - | - | - | - | - |
 | 2010_i2b2_va_re_only | information_extraction | concept_assertion_relation_re_only | This note's problem/test/treatment concepts have already been extracted and are listed after the note text under EXTRACTED_CONCEPTS. For each problem concept, give its assertion status (present, absent, possible, conditional, hypothetical, or associated_with_someone_else); and extract the relations between concepts, one of: TrIP (treatment improves problem), TrWP (treatment worsens problem), TrCP (treatment causes problem), TrAP (treatment administered for problem, outcome not stated), TrNAP (treatment NOT administered because of problem), TeRP (test reveals problem), TeCP (test conducted to investigate problem, outcome not known), PIP (one problem indicates/causes another). Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}. | 170 | - | - | 303 | 4715.0 | 5502.0 | 22928 | - | - | - | - | - | - | - | - |
 | 2010_i2b2_va_section | information_extraction | concept_assertion_relation_section | This is one section excerpted from a larger clinical note (e.g. "HISTORY OF PRESENT ILLNESS", "PAST MEDICAL HISTORY"), not the complete note. Extract every problem, test, and treatment concept in THIS EXCERPT ONLY, give each problem concept's assertion status (present, absent, possible, conditional, hypothetical, or associated_with_someone_else), and extract the relations between concepts, one of: TrIP (treatment improves problem), TrWP (treatment worsens problem), TrCP (treatment causes problem), TrAP (treatment administered for problem, outcome not stated), TrNAP (treatment NOT administered because of problem), TeRP (test reveals problem), TeCP (test conducted to investigate problem, outcome not known), PIP (one problem indicates/causes another). Return JSON {"concepts": [{"id", "type", "text", "assertion"}, ...], "relations": [{"type", "arg1", "arg2"}, ...]}. | 1666 | 860 | 2868 | 301 | 450.0 | 713.7 | 9795 | 299 | 468.0 | 787.7 | 10019 | 296 | 476.5 | 754.3 | 10019 |
-| 2018_n2c2_track1 | classification | cohort_eligibility | Given the patient's longitudinal clinical notes and ONE named clinical trial eligibility criterion (with its definition), decide whether the patient meets that single criterion. Return JSON {"label": "met"} or {"label": "not met"}. | 2626 | 335 | 1118 | 1785 | 5133.5 | 5438.3 | 15349 | 2108 | 4889.0 | 5331.5 | 11747 | 2099 | 5136.0 | 5422.0 | 11755 |
+| 2018_n2c2_track1 | classification | cohort_eligibility | Given the patient's longitudinal clinical notes and ONE named clinical trial eligibility criterion (with its definition), decide whether the patient meets that single criterion. Return JSON {"label": "met"} or {"label": "not met"}. | 2363 | 263 | 1118 | 1798 | 5159 | 5477.8 | 15362 | 2062 | 5037 | 5213.2 | 15353 | 2112 | 5149.0 | 5435.0 | 11768 |
 | 2018_n2c2_track2 | information_extraction | ner_re_medication | Task: Extract every Drug mention in this note and its linked clinical attributes, per the 2018 n2c2 Track 2 ADE/medication-extraction schema (Henry et al. 2020, JAMIA).
 Definitions: Drug = a medication name (generic, brand, or drug class). Strength = amount of active ingredient per dose unit (e.g. "40 mg"). Form = the drug's physical form (e.g. tablet, patch, cream). Dosage = amount given per administration (e.g. "2 tablets"). Frequency = how often it's taken (e.g. "twice daily"). Route = how it enters the body (e.g. "PO", "IV", "topically"). Duration = how long it is/was taken. Reason = the medical indication for the drug. ADE = an adverse reaction attributed to the drug. Each attribute links to the Drug mention(s) it describes -- any attribute type may link to more than one Drug, most often Reason/ADE (e.g. one shared side effect attributed to two co-administered drugs).
-OutputFormat: Nest each attribute mention under its linked Drug, keyed by attribute type -- omit attribute types with no mentions; list any attribute mention not linked to any drug under "unlinked". Return JSON {"drugs": [{"text": ..., "<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}. | 303 | 61 | 202 | 618 | 5375.0 | 5702.1 | 17637 | 661 | 4879.0 | 5104.9 | 11248 | 632 | 5385.0 | 5590.5 | 16069 |
+OutputFormat: Nest each attribute mention under its linked Drug, keyed by attribute type -- omit attribute types with no mentions; list any attribute mention not linked to any drug under "unlinked". Return JSON {"drugs": [{"text": ..., "<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}. | 273 | 30 | 202 | 643 | 5400 | 5688.3 | 12727 | 1916 | 5461.5 | 6080.7 | 17662 | 657 | 5410.0 | 5615.5 | 16069 |
 | 2018_n2c2_track2_ner_only | information_extraction | ner_re_medication_ner_only | Extract every Drug, Strength, Frequency, Dosage, Route, Duration, Form, Reason, and ADE mention span in the text -- entities only, no relation linking. Return JSON {"entities": [{"type": ..., "text": ...}, ...]}. | 303 | - | - | 389 | 6194.0 | 6416.7 | 19776 | - | - | - | - | - | - | - | - |
 | 2018_n2c2_track2_paragraph | information_extraction | ner_re_medication_paragraph | This is one paragraph excerpted from a larger clinical note, not the complete note. Extract every Drug, Strength, Frequency, Dosage, Route, Duration, Form, Reason, and ADE mention in THIS EXCERPT ONLY and link each non-Drug entity to the Drug mention it describes. Return JSON {"drugs": [{"text": ..., "<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}. | 2954 | 580 | 1935 | 173 | 367.0 | 514.7 | 5079 | 173 | 361.5 | 545.4 | 5189 | 173 | 355.0 | 512.9 | 5189 |
 | 2018_n2c2_track2_re_only | information_extraction | ner_re_medication_re_only | This note's Drug/Strength/Frequency/Dosage/Route/Duration/Form/Reason/ADE entities have already been extracted and are listed after the note text under EXTRACTED_ENTITIES. Link each non-Drug entity to the Drug mention it describes (an entity may link to more than one Drug); collect any entity never linked to a Drug under "unlinked". Return JSON {"drugs": [{"text": ..., "<AttrType>": [...], ...}, ...], "unlinked": [{"type", "text"}, ...]}. | 303 | - | - | 462 | 6484.0 | 6717.4 | 20493 | - | - | - | - | - | - | - | - |
-| 2019_n2c2_track1 | similarity_regression | sts_regression | Rate the semantic similarity of the two clinical sentences on a 0-5 scale (0 = unrelated, 5 = semantically equivalent), to two decimal places. Return JSON {"similarity": <float, e.g. 3.50>}. | 1654 | 124 | 412 | 130 | 161.0 | 170.9 | 387 | 131 | 147.0 | 148.6 | 187 | 130 | 148.0 | 148.7 | 194 |
-| 2019_n2c2_track1_cls | classification | sts_classification | Classify the semantic similarity of the two clinical sentences into one of 5 categories: "dissimilar" (unrelated, or share no clinically meaningful information), "weakly_related" (same general topic but very different clinical content), "partially_equivalent" (share important clinical information but differ in other important details), "mostly_equivalent" (same essential clinical meaning, only minor/unimportant details differ), or "highly_equivalent" (semantically equivalent or nearly so). Return JSON {"category": <one of the 5 values above, as a string>}. | 1654 | 124 | 412 | 197 | 229.0 | 238.3 | 455 | 198 | 214.0 | 215.8 | 254 | 197 | 215.5 | 215.9 | 261 |
+| 2019_n2c2_track1 | similarity_regression | sts_regression | Rate the semantic similarity of the two clinical sentences on a 0-5 scale (0 = unrelated, 5 = semantically equivalent), to two decimal places. Return JSON {"similarity": <float, e.g. 3.50>}. | 1489 | 165 | 412 | 141 | 172 | 181.9 | 398 | 141 | 171 | 181.4 | 388 | 141 | 159.0 | 159.7 | 205 |
+| 2019_n2c2_track1_cls | classification | sts_classification | Classify the semantic similarity of the two clinical sentences into one of 5 categories: "dissimilar" (unrelated, or share no clinically meaningful information), "weakly_related" (same general topic but very different clinical content), "partially_equivalent" (share important clinical information but differ in other important details), "mostly_equivalent" (same essential clinical meaning, only minor/unimportant details differ), or "highly_equivalent" (semantically equivalent or nearly so). Return JSON {"category": <one of the 5 values above, as a string>}. | 1489 | 165 | 412 | 209 | 241 | 250.3 | 467 | 209 | 239 | 249.8 | 457 | 209 | 227.5 | 227.9 | 273 |
 | 2019_n2c2_track2 | information_extraction | family_history | Task: Extract family history from the note as an end-to-end summary of member/side/living-status/observation, per the 2019 n2c2 Track 2 Subtask 2 schema (Liu et al. 2018, BioCreative/OHNLP).
 Definitions: FamilyMember is one of Father/Mother/Parent/Sister/Brother/Daughter/Son/Child/Grandmother/Grandfather/Grandparent/Cousin/Sibling/Aunt/Uncle, each with a side of family (Paternal/Maternal/NA -- first-degree relatives are always NA). Observation is a disease/condition mentioned for a family member. LivingStatus score = alive_score * healthy_score, each in {Yes=2, NA=1, No=0} (so 4 = alive and healthy, 0 = deceased). Only report a member here if the note gives a living-status score and/or at least one observation for them -- a member mentioned with neither is not part of this summary.
-OutputFormat: Return JSON with 2 keys: "living_status" (list of {"member", "side", "score"}), "observations" (list of {"member", "side", "text", "negation": "Negated"|"Non_Negated"}). | 98 | 32 | 107 | 437 | 899.0 | 952.0 | 2307 | 571 | 883.0 | 908.2 | 1619 | 437 | 916.0 | 974.0 | 2195 |
+OutputFormat: Return JSON with 2 keys: "living_status" (list of {"member", "side", "score"}), "observations" (list of {"member", "side", "text", "negation": "Negated"|"Non_Negated"}). | 88 | 10 | 107 | 450 | 907.0 | 962.3 | 2320 | 550 | 1005.5 | 988.4 | 1270 | 450 | 929 | 987.0 | 2208 |
 | 2022n2c2_track1 | information_extraction | medication_event | Task: For each medication mention, classify whether a medication change is discussed, per the CMED schema (Mahajan et al. 2021).
 Definitions: Disposition = a change is discussed (e.g. "start Plavix"). NoDisposition = no change is discussed (e.g. "continue lisinopril"). Undetermined = unclear from local context (e.g. "Plan: Lasix"). For each Disposition mention, also classify: Action -- Start/Stop/Increase/Decrease/UniqueDose/OtherChange/Unknown; Certainty -- Certain/Hypothetical/Conditional/Unknown; Temporality -- Past/Present/Future/Unknown; Actor -- Physician/Patient/Unknown; Negation -- Negated/NotNegated. A single mention may have 0, 1, or more Disposition events.
 OutputFormat: "trigger_text" is the medication mention itself (the entity type in this task is always a medication -- "trigger" names its role as what triggers the event, per this schema's event-extraction terminology, not a different kind of span). Return JSON {"events": [{"id", "type", "trigger_text", "attributes": {"Action", "Certainty", "Temporality", "Actor", "Negation"}}, ...]} -- "attributes" is empty for NoDisposition/Undetermined events. | 350 | 50 | 100 | 563 | 1771.0 | 2179.2 | 8629 | 886 | 2038.0 | 2409.9 | 5092 | 643 | 2040.0 | 2238.1 | 5718 |
@@ -918,7 +919,7 @@ BRIEF HOSPITAL COURSE:
 | medmcqa | question_answering | mcqa_explain | Answer the multiple-choice question and explain your reasoning. Return JSON {"answer": <letter>, "explanation": ...}. | 182822 | 4183 | - | 110 | 210.0 | 247.9 | 5459 | 110 | 168.0 | 203.8 | 1122 | - | - | - | - |
 | nli4ct | classification | nli | Determine the relationship between the premise and hypothesis: entailment, contradiction, or neutral. Return JSON {"label": ...}. | 1700 | 200 | 500 | 112 | 478.0 | 560.7 | 2825 | 107 | 462.5 | 516.8 | 2224 | 111 | 460.5 | 565.2 | 2895 |
 | pubmedqa | question_answering | qa_yesnomaybe | Answer the research question yes, no, or maybe given the context, and give a long-form answer. Return JSON {"decision": ..., "long_answer": ...}. | 211269 | 50 | 500 | 135 | 486.0 | 490.7 | 1712 | 264 | 476.0 | 473.3 | 675 | 210 | 469.0 | 468.8 | 824 |
-| semeval_2015 | information_extraction | disorder_normalization | Identify all disorder mentions in the clinical text and normalize each to a UMLS/SNOMED-CT CUI, or "CUI-less" if no matching concept exists. Return JSON {"entities": [{"text": ..., "cui": ...}, ...]}. | 298 | 40 | 133 | 204 | 1348.5 | 2029.1 | 7286 | 1427 | 3493.0 | 3850.2 | 10139 | 894 | 3264.0 | 3523.3 | 10139 |
+| semeval_2015 | information_extraction | disorder_normalization | Identify all disorder mentions in the clinical text and normalize each to a UMLS/SNOMED-CT CUI, or "CUI-less" if no matching concept exists. Return JSON {"entities": [{"text": ..., "cui": ...}, ...]}. | 268 | 30 | 133 | 215 | 1426.5 | 2071.3 | 7297 | 234 | 1022.5 | 1761 | 5696 | 905 | 3275 | 3534.3 | 10150 |
 | umn_abbreviation | classification | abbreviation_disambiguation | Given a clinical abbreviation and its surrounding context, determine what the abbreviation stands for in this specific context. Return JSON {"expansion": ...}. | 19257 | 4127 | 4127 | 126 | 202.0 | 206.2 | 1044 | 128 | 201.0 | 205.7 | 731 | 129 | 202.0 | 206.7 | 685 |
 
 ### Tier A subtask-enrichment datasets (train-only, additive)
@@ -955,7 +956,7 @@ Four tasks are built at **document level** (one example per note/patient, the fu
 - `2022n2c2_track2_mimic` (`sdoh_event`): 1316 train examples
 - `2022n2c2_track2_uw` (`sdoh_event`): 1751 train examples
 
-By comparison, `cohort_eligibility` (2018_n2c2_track1) was deliberately split per-criterion into 2,626 train examples from the same 202 patients, avoiding this problem -- a template that could be applied to the doc-level tasks above (e.g. one example per entity/event/relation) if their small train sets turn out to limit model quality.
+By comparison, `cohort_eligibility` (2018_n2c2_track1) was deliberately split per-criterion into 2,363 train examples from the same 202 patients, avoiding this problem -- a template that could be applied to the doc-level tasks above (e.g. one example per entity/event/relation) if their small train sets turn out to limit model quality.
 
 `ner_re_medication` and `medication_event` now have Tier A subtask-enrichment datasets available (see [Tier A subtask-enrichment datasets](#tier-a-subtask-enrichment-datasets-train-only-additive) above) as an opt-in additive lever for this. `ner_re_medication` additionally has a [paragraph-window dataset](#paragraph-window-datasets-hf-only-additive-not-scored-by-the-doc-level-pipeline) that adds genuinely new (not relabeled) training text spans. `concept_assertion_relation` now has the same pair of levers -- Tier A subtasks plus a section-window dataset (boundaries are ALL-CAPS section headers rather than blank lines, since this format has none).
 

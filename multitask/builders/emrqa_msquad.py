@@ -5,7 +5,7 @@ import pandas as pd
 from multitask.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-DIR = ROOT / "emrqa-msquad" / "raw"
+DIR = ROOT / "raw_datasets" / "emrqa-msquad" / "raw"
 # HF ships train/validation only, no test -- "dev" here is HF's "validation",
 # and (same as medmcqa) it also doubles as the final per-task eval split.
 SPLIT_FILES = {"train": "train-00000-of-00001.parquet", "dev": "validation-00000-of-00001.parquet"}

@@ -18,6 +18,12 @@ mcqa_explain's "explanation" field is intentionally not scored -- there's
 no official metric for free-text rationale quality here, and the plan
 never called for one; only "answer" is compared.
 
+abbreviation_disambiguation (umn_abbreviation) is scored with accuracy +
+macro precision/recall/F1 over whatever sense labels are actually observed
+in gold/predictions for that dataset -- same flat multiclass field-
+comparison shape as nli below, reusing _categorical_prf on the "expansion"
+field rather than a dedicated function.
+
 nli (MedNLI, bionli, nli4ct) is scored with accuracy + macro precision/
 recall/F1 over entailment/contradiction/neutral (per arxiv.org/abs/2305.03598,
 which reports both for NLI) -- macro-averaged over whatever label set is
@@ -376,7 +382,7 @@ def score_dataset(name, predictions):
     if task == "multilabel_cls":
         return _multilabel_prf(rows, predictions)
     if task == "abbreviation_disambiguation":
-        return _accuracy(rows, predictions, "expansion")
+        return _categorical_prf(rows, predictions, "expansion")
     if task == "sts_classification":
         return _ordinal_classification_metrics(rows, predictions, "category", _STS_CATEGORIES)
     if task == "similarity_classification":

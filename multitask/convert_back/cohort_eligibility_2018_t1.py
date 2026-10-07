@@ -32,8 +32,8 @@ from xml.sax.saxutils import escape
 from multitask.schemas import COHORT_CRITERIA
 
 ROOT = Path(__file__).resolve().parents[2]
-EVAL_SCRIPT = ROOT / "2018_n2c2_track1" / "track1_eval_script" / "track1_eval.py"
-GOLD_DIR = ROOT / "2018_n2c2_track1" / "n2c2-t1_gold_standard_test_data" / "test"
+EVAL_SCRIPT = ROOT / "raw_datasets" / "2018_n2c2_track1" / "track1_eval_script" / "track1_eval.py"
+GOLD_DIR = ROOT / "raw_datasets" / "2018_n2c2_track1" / "n2c2-t1_gold_standard_test_data" / "test"
 
 
 def group_by_patient(predictions):

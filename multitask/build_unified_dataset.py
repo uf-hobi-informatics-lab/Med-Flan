@@ -23,7 +23,7 @@ from multitask.builders.simple_tasks import (
     build_mednli, build_mmlu_pro_health, build_nli4ct, build_pubmedqa, build_umn_abbreviation,
 )
 from multitask.builders.sts_2019_t1 import build_sts, build_sts_classification
-from multitask.split_utils import carve_dev_from_test
+from multitask.split_utils import carve_dev_from_train
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 EVAL_DIR = DATA_DIR / "eval"
@@ -137,8 +137,20 @@ def main(seed: int = 13):
     for name, gen, splits in REGISTRY:
         if "train" in splits:
             n_before = len(train_examples)
-            train_examples.extend(gen("train"))
-            print(f"[train] {name}: {len(train_examples) - n_before} examples")
+            this_train = list(gen("train"))
+            print(f"[train] {name}: {len(this_train)} examples")
+
+            # No released dev split -- carve a monitoring-only dev sample out
+            # of *train* with a 9:1 ratio instead. The carve is disjoint: the
+            # dev rows are removed from this dataset's train contribution, so
+            # train and dev never overlap. The official test split (used below
+            # for the final per-task metric) is left entirely untouched.
+            if "dev" not in splits:
+                this_train, carved = carve_dev_from_train(this_train)
+                dev_examples.extend(carved)
+                print(f"[dev]   {name}: {len(carved)} examples carved from train (merged validation only, disjoint)")
+
+            train_examples.extend(this_train)
 
         # The final per-task metric always comes from a genuine held-out test
         # split when one exists; only fall back to dev (medmcqa) when this
@@ -161,14 +173,6 @@ def main(seed: int = 13):
         _write_jsonl(eval_path, eval_examples)
         eval_counts[name] = (eval_split, len(eval_examples))
         print(f"[eval]  {name} ({eval_split}): {len(eval_examples)} examples -> {eval_path.relative_to(DATA_DIR.parent)}")
-
-        # No released dev split -- carve a monitoring-only dev sample out of
-        # test instead. This overlaps test (test itself is left intact above,
-        # so per-task scoring still runs against the full, official test set).
-        if "dev" not in splits and eval_split == "test":
-            carved = carve_dev_from_test(eval_examples)
-            dev_examples.extend(carved)
-            print(f"[dev]   {name}: {len(carved)} examples carved from test (merged validation only, overlaps test)")
 
     rng = random.Random(seed)
 

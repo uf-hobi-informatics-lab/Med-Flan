@@ -1,13 +1,13 @@
 """One-off script used to generate sample_data/ excerpts from the full datasets.
-Not part of the pipeline; kept for reproducibility. Run from repo root with the
-project venv: python sample_data/_gen_samples.py
+Not part of the pipeline; kept for reproducibility. Run from this directory
+(raw_datasets/sample_data/) with the project venv: python _gen_samples.py
 """
 import json
 import pandas as pd
 import datasets
 
-BASE = "."
-SD = "sample_data"
+BASE = ".."  # raw_datasets/ (siblings to sample_data/), run from this dir
+SD = "."
 N = 3
 
 # discharge-me: proper CSV parsing (text fields contain embedded newlines/commas)

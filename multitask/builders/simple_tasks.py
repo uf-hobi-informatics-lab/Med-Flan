@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # ---------------------------------------------------------------------------
 # MedNLI
 # ---------------------------------------------------------------------------
-MEDNLI_DIR = ROOT / "MedNLI/mednli-a-natural-language-inference-dataset-for-the-clinical-domain-1.0.0"
+MEDNLI_DIR = ROOT / "raw_datasets" / "MedNLI/mednli-a-natural-language-inference-dataset-for-the-clinical-domain-1.0.0"
 MEDNLI_SPLITS = {"train": "mli_train_v1.jsonl", "dev": "mli_dev_v1.jsonl", "test": "mli_test_v1.jsonl"}
 
 
@@ -33,7 +33,7 @@ def build_mednli(split):
 # target, binary only -- no neutral class here, confirmed by exhaustive scan
 # of label_cat below)
 # ---------------------------------------------------------------------------
-BIONLI_DIR = ROOT / "bionli" / "raw"
+BIONLI_DIR = ROOT / "raw_datasets" / "bionli" / "raw"
 BIONLI_SPLITS = {"train": "train_balanced.csv", "dev": "dev_balanced.csv", "test": "test.csv"}
 # <el>/<le> and <re>/<er> are literal unescaped entity-highlight markup
 # around mentions in `conclusion` -- confirmed by direct sampling -- stripped
@@ -63,9 +63,9 @@ def build_bionli(split):
 # MedQA-USMLE (US / Mainland / Taiwan) -- MCQA
 # ---------------------------------------------------------------------------
 MEDQA_DIRS = {
-    "MedQA-USMLE-US": ROOT / "MedQA-USMLE/questions/US",
-    "MedQA-USMLE-Mainland": ROOT / "MedQA-USMLE/questions/Mainland",
-    "MedQA-USMLE-Taiwan": ROOT / "MedQA-USMLE/questions/Taiwan",
+    "MedQA-USMLE-US": ROOT / "raw_datasets" / "MedQA-USMLE/questions/US",
+    "MedQA-USMLE-Mainland": ROOT / "raw_datasets" / "MedQA-USMLE/questions/Mainland",
+    "MedQA-USMLE-Taiwan": ROOT / "raw_datasets" / "MedQA-USMLE/questions/Taiwan",
 }
 MEDQA_SPLITS = {"train": "train.jsonl", "dev": "dev.jsonl", "test": "test.jsonl"}
 
@@ -87,7 +87,7 @@ def build_medqa(dataset_name, split):
 def build_mmlu_pro_health(split):
     from datasets import load_from_disk
 
-    ds = load_from_disk(str(ROOT / "MMLU-Pro-Health"))
+    ds = load_from_disk(str(ROOT / "raw_datasets" / "MMLU-Pro-Health"))
     # Single-split arrow dataset; treat it all as "test" (no train/dev given upstream).
     if split != "test":
         return
@@ -136,7 +136,7 @@ def _bucket_biosses(score):
 def build_biosses(split):
     from datasets import load_from_disk
 
-    ds = load_from_disk(str(ROOT / "biosses"))
+    ds = load_from_disk(str(ROOT / "raw_datasets" / "biosses"))
     # Single-split arrow dataset (100 pairs); treat it all as "test" (no train/dev given upstream).
     if split != "test":
         return
@@ -149,7 +149,7 @@ def build_biosses(split):
 # ---------------------------------------------------------------------------
 # medmcqa -- MCQA + explanation
 # ---------------------------------------------------------------------------
-MEDMCQA_DIR = ROOT / "medmcqa/raw"
+MEDMCQA_DIR = ROOT / "raw_datasets" / "medmcqa/raw"
 MEDMCQA_SPLITS = {"train": "train.json", "dev": "dev.json", "test": "test.json"}
 _COP_LETTERS = ["A", "B", "C", "D"]  # cop is 1-indexed onto opa..opd
 
@@ -171,7 +171,7 @@ def build_medmcqa(split):
 # ---------------------------------------------------------------------------
 # pubmedqa -- yes/no/maybe QA
 # ---------------------------------------------------------------------------
-PUBMEDQA_DIR = ROOT / "pubmedqa/raw"
+PUBMEDQA_DIR = ROOT / "raw_datasets" / "pubmedqa/raw"
 PUBMEDQA_SPLITS = {"train": "ori_pqaa.json", "dev": "dev_set.json", "test": "test_set.json"}
 
 
@@ -189,7 +189,7 @@ def build_pubmedqa(split):
 # ---------------------------------------------------------------------------
 # covid (LitCovid) -- multi-label classification
 # ---------------------------------------------------------------------------
-LITCOVID_DIR = ROOT / "covid/raw"
+LITCOVID_DIR = ROOT / "raw_datasets" / "covid/raw"
 LITCOVID_SPLITS = {
     "train": "BC7-LitCovid-Train.csv", "dev": "BC7-LitCovid-Dev.csv", "test": "BC7-LitCovid-Test-GS.csv",
 }
@@ -206,7 +206,7 @@ def build_litcovid(split):
 # ---------------------------------------------------------------------------
 # discharge-me -- summarization (plain-text target, ROUGE-scored)
 # ---------------------------------------------------------------------------
-DISCHARGE_DIR = ROOT / "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3"
+DISCHARGE_DIR = ROOT / "raw_datasets" / "discharge-me-bionlp-acl24-shared-task-on-streamlining-discharge-documentation-1.3"
 DISCHARGE_SPLIT_DIRS = {"train": "train", "dev": "valid", "test": "test_phase_2"}
 
 
@@ -227,7 +227,7 @@ def build_discharge_me(split):
 # ---------------------------------------------------------------------------
 # umn_abbreviation -- clinical abbreviation sense disambiguation
 # ---------------------------------------------------------------------------
-UMN_ABBR_DIR = ROOT / "umn_abbreviation/raw"
+UMN_ABBR_DIR = ROOT / "raw_datasets" / "umn_abbreviation/raw"
 UMN_ABBR_SPLITS = {"train": "train.txt", "dev": "valid.txt", "test": "test.txt"}
 
 
@@ -254,7 +254,7 @@ def build_umn_abbreviation(split):
 # Premise/Hypothesis input, {"label": "entailment"|"contradiction"} target,
 # binary only -- confirmed no neutral class across train/dev/Gold_test)
 # ---------------------------------------------------------------------------
-NLI4CT_DIR = ROOT / "nli4ct" / "raw" / "Complete_dataset"
+NLI4CT_DIR = ROOT / "raw_datasets" / "nli4ct" / "raw" / "Complete_dataset"
 NLI4CT_SPLITS = {"train": "train.json", "dev": "dev.json", "test": "Gold_test.json"}
 NLI4CT_CT_DIR = NLI4CT_DIR / "CT json"
 

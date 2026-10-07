@@ -54,7 +54,7 @@ from pathlib import Path
 from inference_and_eval.schemas import example
 
 ROOT = Path(__file__).resolve().parents[2]
-BASE = ROOT / "2019_n2c2_track1"
+BASE = ROOT / "raw_datasets" / "2019_n2c2_track1"
 SPLIT_FILES = {"train": BASE / "clinicalSTS2019.train.txt", "test": BASE / "clinicalSTS2019.test.txt"}
 # The released test file has no inline score column; the gold scores were
 # published separately, line-aligned to the test file (confirmed same line
