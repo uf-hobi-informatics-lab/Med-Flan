@@ -1,0 +1,129 @@
+# GRPO (multitask, deterministic task-routed reward) for Qwen3-8B -- scripts/run_grpo.py.
+#
+# Structurally modeled on recipes/sang_project/bioleaflets/grpo/s_11.yaml (TRL
+# GRPOTrainer, vLLM colocate, DAPO/GSPO-style clipping) but with the meddata
+# 12-task mix as the RL environment and a DETERMINISTIC reward
+# (med_multitask_reward) that scores each rollout against the gold answer with
+# the same metric that task's official eval uses -- exact-match for the
+# classification/QA tasks, doc-level micro-F1 for the IE tasks -- routed per
+# example by the `task` column (carried through convert_to_grpo).
+#
+# Starts from the BASE Qwen3-8B (the user's choice); swap model_name_or_path to
+# an SFT checkpoint (e.g. /project/med_flan/models/qwen_8b_std_1) once
+# one is available -- standard RLHF order is SFT-then-GRPO.
+#
+# Sharding is DeepSpeed ZeRO-2 (passed via --deepspeed in the runai script), NOT
+# the FSDP2 fields the SFT recipes use -- do not set fsdp: here. Single node,
+# 4 GPUs (B300). Qwen3 is vLLM-native, so rollouts use vLLM colocate.
+
+# Model arguments
+model_name_or_path: /project/models/Qwen3-8B
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+
+# Qwen3 rollouts default to thinking mode (an imd_start...imd_end reasoning block
+# before the answer), which breaks the deterministic JSON-answer reward. TRL's
+# GRPOConfig.chat_template_kwargs is forwarded to every apply_chat_template call
+# (rollout prompt, generation-prompt rendering, reward-text extraction), so this
+# forces non-thinking -> completions are the bare JSON answer.
+chat_template_kwargs:
+  enable_thinking: false
+
+# Data training arguments
+dataset_mixer:
+  /project/med_flan/data/med_flan_v1_md: 1.0   # same 12-task mix as SFT; carries `task`
+dataset_splits:
+- train
+- dev                # mix_datasets renames dev -> "test" key for run_grpo.py
+preprocessing_num_workers: 12
+dataloader_num_workers: 2
+remove_unused_columns: false   # keep `task` (GRPOConfig default, set for clarity)
+
+# GRPO Trainer arguments
+bf16: true
+do_eval: true
+eval_strategy: epoch
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+learning_rate: 1.0e-6
+log_level: info
+logging_steps: 2
+logging_strategy: steps
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+max_prompt_length: 8192
+max_completion_length: 2048
+max_grad_norm: 1.0
+max_steps: -1
+optim: adamw_torch_fused
+optim_target_modules: all-linear
+output_dir: /project/med_flan/models/grpo/qwen_8b_multitask_1
+overwrite_output_dir: true
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 2            # (2*4)=8 must be %num_generations(8)==0
+gradient_accumulation_steps: 1
+push_to_hub: false
+report_to:
+- wandb
+save_strategy: steps
+save_steps: 200
+num_train_epochs: 1
+save_total_limit: 5
+seed: 42
+torch_empty_cache_steps: 200
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+# Deterministic, per-task reward (registered in reward_function_dict). No soft
+# string-similarity reward -- the eval scripts define the metric directly.
+reward_functions:
+- med_multitask_reward
+
+# Moderate KL to anchor to the start checkpoint (the SFT model once model_name_or_path
+# points at an SFT checkpoint) and prevent catastrophic drift -- beta>0 makes TRL load
+# a reference model (= model_name_or_path); sync_ref_model:false keeps it FIXED (not a
+# moving EMA). On B300 the extra ~16GB ref copy is free. Range 0.01-0.04 (R1 used 0.001
+# for reasoning self-discovery, too loose for SFT-anchoring; raise if you see drift,
+# lower if the policy looks over-restricted).
+beta: 0.02
+epsilon: 0.2
+epsilon_high: 0.28
+importance_sampling_level: token   # sequence = GSPO
+loss_type: dr_grpo     # grpo | dr_grpo | bnpo | dapo
+scale_rewards: false
+mask_truncated_completions: true
+top_entropy_quantile: 1.0
+vllm_importance_sampling_correction: true
+vllm_importance_sampling_cap: 2.0
+
+sync_ref_model: false
+ref_model_mixup_alpha: 0.6
+ref_model_sync_steps: 32
+
+# Generation: 4 GPUs, pds=1, spg=4 -> generation_batch_size=16; 16 % 8 == 0.
+num_generations: 8
+generation_batch_size: 16
+steps_per_generation: 4
+temperature: 1.0
+top_p: 1.0
+# Multi-temperature rollout (MDP-GRPO, arXiv:2606.06058) -- OPT-IN. Uncomment to sample
+# the 8 generations per prompt at varied temperatures (2 per bucket, since
+# num_generations(8) % 4 == 0) instead of the single `temperature` above. Raises
+# within-group reward dispersion so all-correct/all-wrong groups (zero advantage -> no
+# gradient) occur less often on our deterministic 0/1 medical rewards. vLLM colocate
+# only (this recipe is vLLM). Keep the first run commented (proven single-temperature
+# baseline); uncomment once the pipeline is validated.
+# temperature_schedule: [0.2, 0.5, 0.8, 1.1]
+
+# vLLM for rollout acceleration (Qwen3 is vLLM-native)
+use_vllm: true
+vllm_mode: colocate
+vllm_enable_sleep_mode: true
+# B300 (~192-288GB HBM3e / GPU): 8B policy (~16GB) + ref model (another ~16GB if
+# beta>0) + vLLM KV cache fit comfortably. 0.5 leaves headroom for a first run; raise
+# toward 0.7 once stable for a larger KV cache (longer completions / more concurrent
+# generations). On 80GB GPUs this would need to be ~0.3 -- not the case here.
+vllm_gpu_memory_utilization: 0.5
+vllm_tensor_parallel_size: 2

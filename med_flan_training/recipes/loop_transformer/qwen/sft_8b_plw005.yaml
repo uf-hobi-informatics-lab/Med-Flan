@@ -1,0 +1,89 @@
+# Model arguments
+# model_name_or_path: /project/models/Qwen3-8B
+model_name_or_path: /project/models/Qwen3-8B
+model_revision: main
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+
+# Qwen3 thinking mode: suppress reasoning. The chat template renders the assistant turn
+# in Qwen3's empty-think-block no-think format (no reasoning content); setting
+# enable_thinking: false additionally makes any generation-prompt rendering (generation
+# eval / inference) insert the empty think block so the model answers directly.
+enable_thinking: false
+
+# Data training arguments
+dataset_mixer:
+  # /project/meddata/multitask/huggingface_format/med_flan: 1.0
+  /project/med_flan/data/med_flan_v1_md: 1.0
+dataset_splits:
+- train
+- dev
+preprocessing_num_workers: 8
+dataloader_num_workers: 2
+remove_unused_columns: false
+
+# SFT trainer config
+bf16: true
+do_eval: true
+eval_strategy: epoch
+max_grad_norm: 1.0
+gradient_checkpointing: false
+log_level: info
+logging_steps: 2
+logging_strategy: steps
+learning_rate: 1.0e-05
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+optim: adamw_torch
+optim_target_modules: all-linear
+weight_decay: 0.01
+max_seq_length: 32768
+# FSDP2: Qwen3 is a standard dense decoder (no looped-activation memory
+# multiplier like hrm_1b/ouro), so full-shard FSDP2 without CPU offload is
+# enough on 4x GPUs. Activation checkpointing is FSDP-native (fsdp_config
+# below) instead of HF's gradient_checkpointing -- transformers warns the
+# latter adds a redundant AllGather in backward under FSDP (see
+# huggingface/transformers#30404). Fall back to fsdp_config.cpu_offload: true
+# if this OOMs.
+fsdp: true
+fsdp_config:
+  version: 2
+  transformer_layer_cls_to_wrap: Qwen3DecoderLayer
+  reshard_after_forward: true
+  activation_checkpointing: true
+  cpu_ram_efficient_loading: true
+  state_dict_type: SHARDED_STATE_DICT
+packing: false
+dataset_num_proc: 16
+max_steps: -1
+num_train_epochs: 10
+output_dir: /project/med_flan/models/qwen_8b_plw005_1
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+per_device_train_batch_size: 4 # this is per device; global batch = per device * gas * gpu * node
+gradient_accumulation_steps: 1 # 1*4*4=16
+push_to_hub: false
+report_to:
+- wandb
+save_strategy: "epoch"
+save_total_limit: 10
+seed: 42
+warmup_ratio: 0.05
+completion_only_loss: true
+
+# force the standard (non-chunked) loss path -- trl's chunked_nll default patches
+# model.forward to skip materializing logits when labels are passed, which breaks
+# PLWTrainer's own logits-based weighted loss.
+loss_type: nll
+
+# ─── Prompt loss weight ──────────────────────────────────────────────────────
+use_plw: true
+use_plw_sample_template: false # this is an inst model, so use the default chat template
+# Shift the PLW prompt/completion boundary to Qwen3's no-think inference boundary: the
+# prompt pre-fills the assistant header + empty think block (add_generation_prompt=True,
+# enable_thinking=false above), and the completion is answer+eos only -- exactly what the
+# model generates at inference. Full token sequence is unchanged; only the loss-weight
+# boundary moves. Set false to keep the full assistant turn as the completion instead.
+plw_match_inference_boundary: true
+prompt_loss_weight: 0.05

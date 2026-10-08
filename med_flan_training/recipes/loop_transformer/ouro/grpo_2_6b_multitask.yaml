@@ -1,0 +1,109 @@
+# GRPO (multitask, deterministic task-routed reward) for Ouro-2.6B -- scripts/run_grpo.py.
+#
+# Same RL setup as the Qwen3 GRPO recipes (meddata 12-task mix, med_multitask_reward)
+# but on Ouro's loop architecture. Two Ouro-specific differences vs SFT:
+#   1. use_vllm: false -- Ouro's custom UT-loop modeling does not run in vLLM (the
+#      repo's Huginn vLLM plugin under eval/ is TP=1 and not wired into TRL's
+#      colocate path), so TRL generates rollouts with the training model's
+#      .generate() (works for any arch; slower than vLLM). max_completion_length is
+#      kept short (1024) because loop-arch .generate() is expensive.
+#   2. GRPO uses Ouro's NATIVE forward -- run_grpo.py passes the model as a path
+#      string (no eager-model patches), so train_last_step_only / freeze_param_patterns
+#      / the SFT loss_type:nll are NOT applied here (they're SFT-only and ignored by
+#      run_grpo.py anyway). The early-exit gate stays trainable and the loss is the
+#      GRPO policy-gradient loss (loss_type: dr_grpo below), not the SFT last-step CE.
+# Ouro uses the standard Qwen chat template (special_tokens below remap to the
+# <|im_start|>/<|im_end|> delimiters), so TRL's apply_chat_template produces a valid
+# Ouro prompt without any custom formatting (unlike HRM-Text).
+#
+# Sharding: DeepSpeed ZeRO-2 via --deepspeed in the runai script (NOT FSDP2). Single
+# node, 4 GPUs. Starts from the base /project/models/Ouro-2.6B-Thinking.
+
+model_name_or_path: /project/models/Ouro-2.6B-Thinking
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+trust_remote_code: true   # required to load Ouro's custom modeling code
+
+# Ouro's bos/eos already exist in vocab but default to <unk>; remap to the Qwen
+# chat delimiters (same as the SFT recipes). run_grpo.py applies these via
+# sync_special_token_ids when data_args.special_tokens is set.
+special_tokens:
+  bos_token: "<|im_start|>"
+  eos_token: "<|im_end|>"
+  unk_token: "<unk>"
+  pad_token: "<pad>"
+
+dataset_mixer:
+  /project/med_flan/data/med_flan_v1_md: 1.0
+dataset_splits:
+- train
+- dev
+preprocessing_num_workers: 12
+dataloader_num_workers: 2
+remove_unused_columns: false
+
+bf16: true
+do_eval: true
+eval_strategy: epoch
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+learning_rate: 5.0e-7   # lower than Qwen3: Ouro reuses weights 4x/forward (UT loop)
+log_level: info
+logging_steps: 2
+logging_strategy: steps
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+max_prompt_length: 8192
+max_completion_length: 1024   # loop-arch .generate() is slow without vLLM; keep short
+max_grad_norm: 1.0
+max_steps: -1
+optim: adamw_torch_fused
+optim_target_modules: all-linear
+output_dir: /project/med_flan/models/grpo/ouro_2_6b_multitask_1
+overwrite_output_dir: true
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 1
+push_to_hub: false
+report_to:
+- wandb
+save_strategy: steps
+save_steps: 200
+num_train_epochs: 1
+save_total_limit: 5
+seed: 42
+torch_empty_cache_steps: 200
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+reward_functions:
+- med_multitask_reward
+
+# Moderate KL to anchor to the start checkpoint (the SFT model once model_name_or_path
+# points at an SFT checkpoint) and prevent catastrophic drift -- beta>0 loads a fixed
+# reference model (= model_name_or_path); sync_ref_model:false keeps it fixed (not a moving
+# EMA). On B300 the extra ref copy is free. Range 0.01-0.04 (raise if drift, lower if
+# over-restricted).
+beta: 0.02
+epsilon: 0.2
+epsilon_high: 0.28
+importance_sampling_level: token
+loss_type: dr_grpo
+scale_rewards: false
+mask_truncated_completions: true
+top_entropy_quantile: 1.0
+# no vllm_importance_sampling_correction (use_vllm: false -> no vLLM logprobs to correct)
+
+sync_ref_model: false
+ref_model_mixup_alpha: 0.6
+ref_model_sync_steps: 32
+
+num_generations: 8
+generation_batch_size: 16
+steps_per_generation: 4
+temperature: 1.0
+top_p: 1.0
+
+use_vllm: false   # Ouro loop arch is not vLLM-supported; TRL uses .generate() for rollouts

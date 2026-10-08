@@ -1,0 +1,108 @@
+# Curriculum stage1 (warmup) variant of sft_bp5_std_v1_md.yaml: trains 2 epochs on the
+# subtask-decomposed med_flan_v1_md_sft_stage1_subtasks slice instead of the full
+# med_flan_v1_md mix, starting from the base pretrained checkpoint. Only 1
+# checkpoint is kept (save_total_limit) -- its output_dir becomes stage2's
+# model_name_or_path. Judged only on its own dev-split loss, never scored via
+# run_eval.py. See sft_bp5_std_stage2_curriculum.yaml (the continuation) and sft_bp5_std_v1_md.yaml
+# (full rationale for the shared hyperparameters).
+# ─── Model ──────────────────────────────────────────────────────────────────
+model_name_or_path: /project/models/HRM-Text-1B
+model_revision: main
+torch_dtype: bfloat16
+trust_remote_code: true
+condition: direct          # HRM condition token; choices: direct | cot | noisy | synth
+                           # Comma-separate for composition, e.g. "synth,cot"
+# The model's context window (max_position_embeddings) automatically syncs to
+# max_seq_length below -- if the checkpoint's own trained value is already >=
+# max_seq_length this is a no-op; otherwise it's extended with a yarn-scaled RoPE.
+# HRM-Text uses RoPE, not a learned/absolute positional embedding matrix, so
+# extending it is a safe config override. See alignment/context_extension.py.
+
+# ─── Data ───────────────────────────────────────────────────────────────────
+dataset_path: /project/med_flan/data/curriculum/med_flan_v1_md_sft_stage1_subtasks   # HF Arrow DatasetDict (save_to_disk); train/dev splits
+                                                # carry a `messages` column (OpenAI format) consumed by
+                                                # the HRM chat-template path (use_chat_template: true).
+# eval_dataset_path: /path/to/your/eval.jsonl    # Optional; only needed if eval lives in a SEPARATE
+                                                  # file/dir from dataset_path.
+dataset_splits:
+  - train
+  - dev
+use_chat_template: true
+max_seq_length: 32768
+preprocessing_num_workers: 8
+
+# ─── Training ───────────────────────────────────────────────────────────────
+output_dir: /project/med_flan/models/curriculum/hrm_1b_bp5_std_stage1_1
+bf16: true
+do_eval: true
+eval_strategy: epoch
+
+learning_rate: 1.0e-5
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+warmup_ratio: 0.05
+
+num_train_epochs: 2
+# B300 (FSDP, 4 GPUs): per_device=4, gas=1 -> global batch 4*1*4=16.
+# CAUTION: max_seq_length doubled to 32768 (from 16384) AND per_device doubled to 4
+# (from 2) vs the prior validated config -> ~4x the looped-activation memory that
+# HRM-Text's bp_steps recurrence (already ~4x a standard 1B) multiplies. FSDP
+# activation_checkpointing (below) is on. If this OOMs, drop per_device_train_batch_size
+# to 1-2 (raise gas to keep the global batch) or enable fsdp_config.cpu_offload: true.
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 1
+gradient_checkpointing: false           # FSDP-native activation_checkpointing (below) replaces this.
+
+optim: adamw_torch
+weight_decay: 0.01
+max_grad_norm: 1.0
+dataloader_num_workers: 4
+
+# ─── Prompt loss weight ──────────────────────────────────────────────────────
+# 0.0 = no loss on instruction tokens (equivalent to native target_only=True).
+# Set >0 for PLW-style partial supervision (grads on the prompt prefix).
+prompt_loss_weight: 0.0
+
+# ─── Truncated-backprop window (bp_steps) ────────────────────────────────────
+# Fixed for the whole fine-tuning run -- no warmup schedule (unlike pretraining's
+# bp_min_steps/bp_max_steps/bp_warmup_ratio). Valid: 5-8. Applied via
+# alignment.hrm.bp_cycles.apply_fixed_bp_cycles(model, bp_steps). The SFTConfig
+# default is 5, so this MUST be set explicitly per recipe -- otherwise bp6/7/8
+# silently train with bp5 (the file name is not read by the code).
+# 5 = pretraining's terminal value; 8 = full backprop through every H/L cycle
+# for this model's H_cycles=2, L_cycles=3.
+bp_steps: 5
+
+# ─── Checkpointing / logging ─────────────────────────────────────────────────
+save_strategy: epoch
+save_total_limit: 1
+logging_steps: 2
+logging_first_step: true
+report_to:
+  - wandb
+
+# ─── Seed ────────────────────────────────────────────────────────────────────
+seed: 42
+
+# ─── FSDP2 (B300, 4 GPUs) ───────────────────────────────────────────────────
+# reshard_after_forward is false because HRM-Text calls the SAME wrapped decoder
+# layer bp_steps times per forward (the recurrence loop) -- resharding after each
+# call would force FSDP to re-all-gather that layer's params on every one of those
+# bp_steps passes. Keeping it gathered through the whole forward+backward costs only
+# one extra unsharded layer's worth of memory but avoids bp_steps-1 redundant
+# all-gathers per layer per step. transformer_layer_cls_to_wrap is HrmTextDecoderLayer
+# (not the plain Qwen3DecoderLayer) -- confirmed against a working on-cluster config;
+# this repo's local HRM-Text mirror doesn't define this class, but the actual
+# sapientinc/HRM-Text-1B trust_remote_code modeling code does. Activation checkpointing
+# is FSDP-native (below) and applies per recurrence pass. Add fsdp_config.cpu_offload:
+# true if this OOMs.
+fsdp: true
+fsdp_config:
+  version: 2
+  transformer_layer_cls_to_wrap: HrmTextDecoderLayer
+  reshard_after_forward: false
+  activation_checkpointing: true
+  cpu_ram_efficient_loading: true
+  state_dict_type: FULL_STATE_DICT

@@ -1,0 +1,114 @@
+# Model arguments
+# model_name_or_path: /project/models/Ouro-2.6B-Thinking
+model_name_or_path: /project/models/Ouro-2.6B-Thinking
+model_revision: main
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+trust_remote_code: true # required to load Ouro's custom modeling code
+
+# force special tokens: bos/eos already exist in vocab but default to <|endoftext|> for all three
+special_tokens:
+  bos_token: "<|im_start|>"
+  eos_token: "<|im_end|>"
+  unk_token: "<|endoftext|>"
+  pad_token: "<|endoftext|>"
+
+# Data training arguments
+dataset_mixer:
+  /project/med_flan/data/med_flan_v1_md: 1.0
+dataset_splits:
+- train
+- dev
+preprocessing_num_workers: 8
+dataloader_num_workers: 2
+remove_unused_columns: false
+
+# SFT trainer config
+bf16: true
+do_eval: true
+eval_strategy: epoch
+max_grad_norm: 1.0
+gradient_checkpointing: false           # FSDP-native activation_checkpointing (below) replaces this.
+log_level: info
+logging_steps: 2
+logging_strategy: steps
+learning_rate: 5.0e-06 # weights are reused 4x/forward under the loop, so gradients accumulate 4x too
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+optim: adamw_torch
+optim_target_modules: all-linear
+weight_decay: 0.01
+# max_seq_length doubled to 16384 (from the 8192 base recipe). Ouro-2.6B's native
+# max_position_embeddings is 65536, well above this, so no context extension kicks in.
+max_seq_length: 32768
+# FSDP2: full-shard params/grads/optimizer state across all 4 GPUs, no CPU offload
+# (matches the non-offload zs3 recipe this replaces). Activation checkpointing is
+# FSDP-native (activation_checkpointing below) instead of HF's gradient_checkpointing --
+# transformers warns the latter adds a redundant AllGather in backward under FSDP (see
+# huggingface/transformers#30404).
+# reshard_after_forward is false because Ouro calls the SAME wrapped decoder layer 4x
+# per forward (the UT loop noted above) -- resharding after each call would force FSDP
+# to re-all-gather that layer's params on every one of those 4 passes. Keeping it
+# gathered through the whole forward+backward costs only one extra unsharded layer's
+# worth of memory but avoids 3 redundant all-gathers per layer per step (confirmed as
+# the right setting for looped architectures via a validated HRM-Text FSDP config).
+# CAUTION: transformer_layer_cls_to_wrap is inferred from vLLM's Ouro port
+# (vllm/model_executor/models/ouro.py::OuroDecoderLayer) since Ouro's actual
+# trust_remote_code modeling_ouro.py isn't inspectable from this machine -- verify this
+# class name exists in the cached modeling_ouro.py on the training host before a real run.
+# If it doesn't match, accelerate's auto-wrap policy raises immediately at startup.
+# Fall back to fsdp_config.cpu_offload: true if this OOMs.
+fsdp: true
+fsdp_config:
+  version: 2
+  transformer_layer_cls_to_wrap: OuroDecoderLayer
+  reshard_after_forward: false
+  activation_checkpointing: true
+  cpu_ram_efficient_loading: true
+  state_dict_type: SHARDED_STATE_DICT
+packing: false
+dataset_num_proc: 16
+max_steps: -1
+num_train_epochs: 10
+output_dir: /project/med_flan/models/ouro_2_6b_plw005_1
+overwrite_output_dir: true
+per_device_eval_batch_size: 8
+per_device_train_batch_size: 2 # this is per device; global batch = per device * gas * gpu * node
+gradient_accumulation_steps: 2 # 2*4*4=32 global on 4 B300 GPUs; per_device 1->2, gas 8->4
+                                # (hold global batch 32) -- B300 fits the 4x looped-activation
+                                # memory at 16384 where H100 was pinned to per_device=1.
+push_to_hub: false
+report_to:
+- wandb
+save_strategy: "epoch"
+save_steps: 1000
+torch_empty_cache_steps: 1000
+save_total_limit: 10
+seed: 42
+warmup_ratio: 0.05
+completion_only_loss: true
+
+# Ouro is recurrent (Universal Transformer): it reuses the same decoder layers
+# total_ut_steps (4) times per forward and keeps a separate KV cache per UT step. During
+# training that KV cache is never reused (full-sequence passes), so use_cache=true is a 4x
+# memory multiplier on top of the 4x looped activation memory -- it OOMs runs the std recipe
+# survives. The std path forces use_cache=False (TRL SFTTrainer); this sets it for the PLW
+# path (PLWTrainer honors the field at forward time).
+use_cache: false
+
+# ouro: compute loss from the final UT loop step only instead of the native 4-step
+# weighted logits combination (saves ~4x logits memory, matches inference behavior),
+# and freeze the early-exit gate since plain CE won't train it sensibly.
+train_last_step_only: true
+freeze_param_patterns:
+  - early_exit_gate
+
+# force the standard (non-chunked) loss path -- see ouro.yaml for the full explanation
+# of why trl's chunked_nll loss_type is incompatible with Ouro's backbone forward.
+loss_type: nll
+
+# ─── Prompt loss weight ──────────────────────────────────────────────────────
+use_plw: true
+use_plw_sample_template: false # this is an inst model, so use the default chat template
+prompt_loss_weight: 0.05

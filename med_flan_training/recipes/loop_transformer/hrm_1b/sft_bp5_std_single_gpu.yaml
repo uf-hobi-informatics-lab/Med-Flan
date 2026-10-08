@@ -1,0 +1,90 @@
+# ─── Model ──────────────────────────────────────────────────────────────────
+model_name_or_path: /project/models/HRM-Text-1B
+model_revision: main
+torch_dtype: bfloat16
+trust_remote_code: true
+condition: direct          # HRM condition token; choices: direct | cot | noisy | synth
+                           # Comma-separate for composition, e.g. "synth,cot"
+# The model's context window (max_position_embeddings) automatically syncs to
+# max_seq_length below -- if the checkpoint's own trained value is already >=
+# max_seq_length this is a no-op; otherwise it's extended with a yarn-scaled RoPE.
+# HRM-Text uses RoPE, not a learned/absolute positional embedding matrix, so
+# extending it is a safe config override. See alignment/context_extension.py.
+
+# ─── Data ───────────────────────────────────────────────────────────────────
+dataset_path: /project/med_flan/med_flan_v1   # HF Arrow DatasetDict (save_to_disk); train/dev splits
+                                                # carry a `messages` column (OpenAI format) consumed by
+                                                # the HRM chat-template path (use_chat_template: true).
+# eval_dataset_path: /path/to/your/eval.jsonl    # Optional; only needed if eval lives in a SEPARATE
+                                                  # file/dir from dataset_path.
+dataset_splits:
+  - train
+  - dev
+use_chat_template: true
+max_seq_length: 32768
+preprocessing_num_workers: 8
+
+# ─── Training ───────────────────────────────────────────────────────────────
+output_dir: /project/med_flan/models/hrm_1b_bp5_std_v1_single_gpu
+bf16: true
+do_eval: true
+eval_strategy: epoch
+
+learning_rate: 1.0e-5
+lr_scheduler_type: cosine_with_min_lr
+lr_scheduler_kwargs:
+  min_lr_rate: 0.1
+warmup_ratio: 0.05
+
+num_train_epochs: 10
+# B300 (FSDP, 4 GPUs): per_device=4, gas=1 -> global batch 4*1*4=16.
+# CAUTION: max_seq_length doubled to 32768 (from 16384) AND per_device doubled to 4
+# (from 2) vs the prior validated config -> ~4x the looped-activation memory that
+# HRM-Text's bp_steps recurrence (already ~4x a standard 1B) multiplies. FSDP
+# activation_checkpointing (below) is on. If this OOMs, drop per_device_train_batch_size
+# to 1-2 (raise gas to keep the global batch) or enable fsdp_config.cpu_offload: true.
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 4
+gradient_checkpointing: true            # No FSDP-native activation checkpointing on 1 GPU -- use this instead.
+
+optim: adamw_torch
+weight_decay: 0.01
+max_grad_norm: 1.0
+dataloader_num_workers: 4
+
+# ─── Prompt loss weight ──────────────────────────────────────────────────────
+# 0.0 = no loss on instruction tokens (equivalent to native target_only=True).
+# Set >0 for PLW-style partial supervision (grads on the prompt prefix).
+prompt_loss_weight: 0.0
+
+# ─── Truncated-backprop window (bp_steps) ────────────────────────────────────
+# Fixed for the whole fine-tuning run -- no warmup schedule (unlike pretraining's
+# bp_min_steps/bp_max_steps/bp_warmup_ratio). Valid: 5-8. Applied via
+# alignment.hrm.bp_cycles.apply_fixed_bp_cycles(model, bp_steps). The SFTConfig
+# default is 5, so this MUST be set explicitly per recipe -- otherwise bp6/7/8
+# silently train with bp5 (the file name is not read by the code).
+# 5 = pretraining's terminal value; 8 = full backprop through every H/L cycle
+# for this model's H_cycles=2, L_cycles=3.
+bp_steps: 5
+
+# ─── Checkpointing / logging ─────────────────────────────────────────────────
+save_strategy: epoch
+save_total_limit: 10
+logging_steps: 2
+logging_first_step: true
+report_to:
+  - wandb
+
+# ─── Seed ────────────────────────────────────────────────────────────────────
+seed: 42
+
+# ─── FSDP disabled: single-GPU backup ────────────────────────────────────────
+# Backup variant for the suspected FSDP2 final-checkpoint bug: Accelerate's
+# FSDP2 plugin may not honor set_state_dict_type("FULL_STATE_DICT") before the
+# final trainer.save_model() call (scripts/run_hf_sft.py), so the consolidated
+# model.safetensors may never actually get written for FSDP2 runs. Runs on a
+# single GPU with no sharding at all, so the normal (non-FSDP) Trainer save
+# path is used instead. gradient_accumulation_steps is scaled 4x (the dropped
+# GPU_NUM) below so the global batch size matches the original recipe.
+fsdp: false
