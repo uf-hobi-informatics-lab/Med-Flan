@@ -1,0 +1,22 @@
+# Med-Flan runtime dependencies
+#
+# Inference and training run inside NVIDIA vLLM containers, which already
+# ship vLLM, PyTorch, and a pinned `transformers`. Do NOT install or upgrade
+# `transformers` from this file — use the version baked into the container:
+#
+#   Ouro model family : nvcr.io/nvidia/vllm:26.04-py3
+#   Qwen + HRM family : nvcr.io/nvidia/vllm:26.08-py3
+#
+# Install the HuggingFace ecosystem packages below on top of the container's
+# base image (`pip install -r requirement.txt`).
+
+trl
+accelerate
+datasets<5.0
+bitsandbytes
+einops
+packaging
+tensorboard
+wandb
+safetensors
+peft
