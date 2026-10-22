@@ -121,7 +121,7 @@ RANKS=(3 5 7 8 9 10)
 # making cross-variant comparisons at a given rank misleading.
 EXPECTED_CHECKPOINTS=10
 
-CHECKING_DIR="/hpcfs/runai_data/projects/genai-gs/med_flan/models/${MAIN_FOLDER}"
+CHECKING_DIR="${CHECKING_DIR:-${MODELS_DIR}}"
 
 if [ ! -d "${CHECKING_DIR}" ]; then
   echo "[ERROR] ${CHECKING_DIR} does not exist" >&2

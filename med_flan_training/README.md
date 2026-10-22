@@ -20,7 +20,7 @@ the `v1_md` (markdown) data variant as the canonical representative.
 
 ```
 med_flan_training/
-  setup.py  setup.cfg  Makefile  requirements.txt   # pip-installable package
+  requirements.txt                           # training-time deps (installed into the container)
   src/alignment/                              # trainers, configs, HRM subpackage, GRPO rewards
   scripts/                                    # run_sft.py run_grpo.py run_hf_sft.py analyze_token_lengths.py
   experiments/
@@ -33,7 +33,7 @@ med_flan_training/
       launch_v1_runai.sh  launch_curriculum_stage{1,2}_runai.sh
       analyze_token_lengths.runai.sh
   recipes/
-    accelerate_configs/                       # deepspeed_zs2.json (GRPO)
+    accelerate_configs/                       # fsdp.yaml, fsdp_qlora.yaml, multi_gpu.yaml
     loop_transformer/
       hrm_1b/                                 # sft_bp5_std, sft_bp5_std_single_gpu, sft_bp5_weighted_json
       ouro/                                   # sft_2_6b_{std,std_gated,plw005,plw010,weighted_json}, grpo_2_6b_multitask
@@ -61,9 +61,14 @@ RunAI PVC mounts in the launch scripts use the same paths (`path=/project`,
 
 ## Install
 
+Install the training-time dependencies into the container's base image:
+
 ```bash
-pip install -e .
+pip install -r requirements.txt
 ```
+
+(See the root [`README.md`](../README.md#environment) for the container setup; this
+directory is not a pip-installable package — `src/alignment` is used via `scripts/`.)
 
 WANDB and user identity are read from the environment (see
 `experiments/wandb.sh`); export `WANDB_API_KEY`, `WANDB_BASE_URL`,
@@ -79,7 +84,9 @@ bash experiments/loop_transformer/ouro/runai/sft_2_6b_std.runai.sh
 bash experiments/loop_transformer/qwen/runai/sft_8b_std.runai.sh
 ```
 
-GRPO (uses `recipes/accelerate_configs/deepspeed_zs2.json`):
+GRPO (passes `--deepspeed=${ROOT}/recipes/accelerate_configs/deepspeed_zs2.json`;
+provide that DeepSpeed ZeRO-2 config on the host, or adjust the path in the
+GRPO launch scripts):
 
 ```bash
 bash experiments/loop_transformer/ouro/runai/grpo_2_6b_multitask.runai.sh

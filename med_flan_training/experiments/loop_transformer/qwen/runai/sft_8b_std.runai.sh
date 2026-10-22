@@ -36,7 +36,7 @@ RUN_CMD="torchrun --nproc_per_node=${GPU_NUM} --nnodes=1 ${TRAIN_SCRIPT} ${TRAIN
 
 echo "[DEBUG] RUN_CMD=${RUN_CMD}"
 
-# Mirror stdout/stderr to a file on the weka PVC (in addition to the terminal /
+# Mirror stdout/stderr to a file on the shared PVC (in addition to the terminal /
 # RunAI-captured pod log) -- survives pod crashes/restarts and stays readable
 # after the job/pod is gone.
 REMOTE_CMD='

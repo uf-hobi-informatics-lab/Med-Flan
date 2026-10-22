@@ -10,7 +10,7 @@ JSON target schemas, and merged-train/per-task-eval protocol.
 **25 task tags** (17 end-to-end + 6 Tier A train-only subtask-enrichment
 tags + 2 paragraph/section-window tags, see [Tier A subtask-enrichment datasets](#tier-a-subtask-enrichment-datasets-train-only-additive)
 and [Paragraph-window datasets](#paragraph-window-datasets-hf-only-additive-not-scored-by-the-doc-level-pipeline)),
-**26 datasets.** ~716K merged training examples, ~473M tokens
+**26 datasets.** ~716K merged training examples (~585K after filtering), ~474M tokens
 (cl100k) — see [Data balance](#data-balance) for the per-dataset breakdown.
 
 ## Quickstart

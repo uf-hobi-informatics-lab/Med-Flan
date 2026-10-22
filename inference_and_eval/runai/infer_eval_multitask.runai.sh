@@ -120,7 +120,7 @@ case "${BACKEND_ENGINE}" in
     ;;
 esac
 
-PROJECT_NAME="genai-gs"
+PROJECT_NAME="${PROJECT_NAME:-default}"
 BASE="/projects"
 ROOT=${BASE}/med_flan
 # repo root -- inference_and_eval/ (the module run via `python -m`) lives here,
@@ -151,10 +151,10 @@ fi
 
 case "${FAMILY}" in
   hrm)
-    IMAGE=runartifacts.am.lilly.com/lillypod/l069561/hrm_train:base
+    IMAGE="${IMAGE:-${USER}/hrm_train:base}"
     ;;
   ouro|qwen)
-    IMAGE=runartifacts.am.lilly.com/lillypod/l069561/ouro_train:base
+    IMAGE="${IMAGE:-${USER}/ouro_train:base}"
     ;;
   *)
     echo "[ERROR] could not determine image family from MODEL_PATH's variant dir '${VARIANT_DIR}'" \
@@ -283,7 +283,7 @@ EVAL_CMD="python3 -m inference_and_eval.inference.run_eval_csv --completions-dir
 echo "[DEBUG] GEN_CMD=${GEN_CMD}"
 echo "[DEBUG] EVAL_CMD=${EVAL_CMD}"
 
-# Mirror stdout/stderr to a file on the weka PVC (in addition to the terminal /
+# Mirror stdout/stderr to a file on the shared PVC (in addition to the terminal /
 # RunAI-captured pod log) -- survives pod crashes/restarts and stays readable
 # after the job/pod is gone.
 REMOTE_CMD='
@@ -307,14 +307,14 @@ ${EVAL_CMD}
 # If this job name already exists in the project, skip instead of failing.
 set +e
 SUBMIT_OUTPUT=$(runai training submit "${JOB_NAME}" \
-    --node-pools weka-ready \
+    --node-pools "${NODE_POOL:-default}" \
     --auto-deletion-time-after-completion 1h \
     -i "${IMAGE}" \
     --gpu-devices-request ${GPU_NUM} \
     --cpu-core-request 16 \
     --cpu-memory-request 200Gi \
     --cpu-memory-limit 400Gi \
-    --environment USER=xi.yang5 \
+    --environment USER=${USER} \
     --environment ROOT=${ROOT} \
     --environment REPO_ROOT=${REPO_ROOT} \
     --environment TMPDIR=/projects/cache/temp \
@@ -330,8 +330,8 @@ SUBMIT_OUTPUT=$(runai training submit "${JOB_NAME}" \
     --environment GEN_CMD="${GEN_CMD}" \
     --environment EVAL_CMD="${EVAL_CMD}" \
     --environment STDOUT_LOG_DIR=${STDOUT_LOG_DIR} \
-    --existing-pvc claimname=weka-genai-gs-proj,path=/projects \
-    --existing-pvc claimname=weka-genai-gs-qwen,path=/data/qwen \
+    --existing-pvc claimname=${PVC_PROJECT:-project},path=/projects \
+    --existing-pvc claimname=${PVC_QWEN:-qwen},path=/data/qwen \
     --working-dir /projects \
     --priority medium-high \
     --backoff-limit 3 \

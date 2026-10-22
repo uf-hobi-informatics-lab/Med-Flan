@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2024 The Eli Lilly AADS Team. All rights reserved.
 
 import logging
 import sys
